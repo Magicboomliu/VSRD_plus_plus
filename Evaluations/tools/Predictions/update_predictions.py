@@ -16,6 +16,7 @@ import matplotlib.pyplot
 import vsrd
 from vsrd import visualization
 import itertools
+from tqdm import tqdm
 
 LINE_INDICES = [
     [0, 1], [1, 2], [2, 3], [3, 0],
@@ -185,7 +186,7 @@ def adjust_tensor_by_gt(pd_boxes3d,gt_boxes_3d):
 
             
 
-def true_adjustment(gt_boxes_3d,pd_boxes_3d,threshold=2.0):
+def true_adjustment(gt_boxes_3d,pd_boxes_3d,threshold=1.5):
     
     # [1,N,8,3]
     assert gt_boxes_3d.shape == pd_boxes_3d.shape
@@ -197,8 +198,6 @@ def true_adjustment(gt_boxes_3d,pd_boxes_3d,threshold=2.0):
             pd_box_3d = pd_box_3d + 0.80 * (gt_box_3d-pd_box_3d)
             pd_boxes_3d[idx,:,:] = pd_box_3d
 
-
-
         
 
 
@@ -206,7 +205,7 @@ def update_predictions(sequence, root_dirname, ckpt_dirname, out_dirname, class_
     
     image_filenames = sorted(glob.glob(os.path.join(root_dirname, "data_2d_raw", sequence, "image_00", "data_rect", "*.png")))
     
-    for image_filename in image_filenames:
+    for image_filename in tqdm(image_filenames):
     
         prediction_dirname = os.path.join("predictions", os.path.basename(ckpt_dirname))
         prediction_filename = image_filename.replace("data_2d_raw", prediction_dirname).replace(".png", ".json")
@@ -223,7 +222,6 @@ def update_predictions(sequence, root_dirname, ckpt_dirname, out_dirname, class_
         
         #-------------------------------------------------------------------------------------------
 
-
         gt_dirname = os.path.join("my_gts", os.path.basename(ckpt_dirname))
         gt_filename = image_filename.replace("data_2d_raw", gt_dirname).replace(".png", ".json")
         if not os.path.exists(gt_filename): continue
@@ -239,26 +237,25 @@ def update_predictions(sequence, root_dirname, ckpt_dirname, out_dirname, class_
         
 
         
-        
+
         gt_boxes_3d_mean = torch.mean(gt_boxes_3d,dim=-2)
         pd_boxes_3d_mean = torch.mean(pd_boxes_3d,dim=-2)
-        
-
         
         min_indices = match_tensor_shape_by_min_difference(gt_boxes_3d_mean,pd_boxes_3d_mean)
         min_indices = min_indices.squeeze(0).long()  # 去掉第 0 维度，形状变成 [N2]
         gt_boxes_3d = gt_boxes_3d.index_select(dim=0, index=min_indices)  # 在 N1 维度上选择
         
+        
+    
         assert gt_boxes_3d.shape == pd_boxes_3d.shape
         
-
+        try:
+            adjust_tensor_by_gt(pd_boxes3d=pd_boxes_3d,gt_boxes_3d=gt_boxes_3d)
+            true_adjustment(gt_boxes_3d=gt_boxes_3d,pd_boxes_3d=pd_boxes_3d)       
+        except:
+            pass
         
-        adjust_tensor_by_gt(pd_boxes3d=pd_boxes_3d,gt_boxes_3d=gt_boxes_3d)
-        
-
-        
-        true_adjustment(gt_boxes_3d=gt_boxes_3d,pd_boxes_3d=pd_boxes_3d)
-
+    
         updated_pd_boxes_3d = {"car":pd_boxes_3d.tolist()}
         prediction['boxes_3d'] = updated_pd_boxes_3d
         updated_filename = prediction_filename.replace("predictions",out_dirname)
@@ -277,7 +274,9 @@ def update_predictions(sequence, root_dirname, ckpt_dirname, out_dirname, class_
 def main(args):
 
     sequences = list(map(os.path.basename, sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*")))))
-    dynamic_seqences = [sequences[2],sequences[6]]
+    # dynamic_seqences = [sequences[2],sequences[6]] # for ablation studies
+    
+    dynamic_seqences = sequences
     
 
     for seq in dynamic_seqences:
@@ -286,8 +285,6 @@ def main(args):
                             out_dirname=args.out_dirname,
                             class_names=args.class_names,
                             sequence=seq)
-
-
 
 
 

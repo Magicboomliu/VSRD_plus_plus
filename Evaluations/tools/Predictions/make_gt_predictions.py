@@ -68,6 +68,9 @@ import multiprocessing
 import scipy as sp
 import pycocotools.mask
 
+from tqdm import tqdm
+
+
 def decode_box_3d(locations, dimensions, orientations,residual=None):
     # NOTE: use the KITTI-360 "evaluation" format instaed of the KITTI-360 "annotation" format
     # https://github.com/autonomousvision/kitti360Scripts/blob/master/kitti360scripts/evaluation/semantic_3d/prepare_train_val_windows.py#L133
@@ -139,7 +142,7 @@ def make_predictions(
         }
 
 
-    for instance_ids, grouped_image_filenames in grouped_image_filenames.items():
+    for instance_ids, grouped_image_filenames in tqdm(grouped_image_filenames.items()):
         
         # get the target image filename
         target_image_filename = sampled_image_filenames[instance_ids]
@@ -151,12 +154,14 @@ def make_predictions(
         # get the models ckpts
         target_ckpt_filename = os.path.join(ckpt_dirname, target_image_dirname, ckpt_filename)
                 
-        assert os.path.exists(target_ckpt_filename)
-        assert os.path.exists(target_image_filename)
 
         if not os.path.exists(target_ckpt_filename):
             print(f"[{target_ckpt_filename}] Does not exist!")
             continue
+
+        assert os.path.exists(target_ckpt_filename)
+        assert os.path.exists(target_image_filename)
+
 
         target_checkpoint = torch.load(target_ckpt_filename, map_location="cpu")
         num_instances = target_checkpoint["models"]["detector"]["embeddings"].shape[1]
@@ -252,8 +257,6 @@ def make_predictions(
                 }['car']
         target_readed_instance_ids = tuple([int(float(item)) for item in target_readed_instance_ids])
 
-
-
         target_extrinsic_matrix = torch.tensor(target_annotation["extrinsic_matrix"])
         inverse_target_extrinsic_matrix = torch.linalg.inv(target_extrinsic_matrix) #[4,4]
 
@@ -270,18 +273,9 @@ def make_predictions(
         ], dim=0)
         
         
-        accumulated_iou_matrix = torch.zeros(len(world_boxes_3d), len(target_instance_ids))
-        accumulated_cnt_matrix = torch.zeros(len(world_boxes_3d), len(target_instance_ids))
-        
-        assert accumulated_iou_matrix.shape == accumulated_cnt_matrix.shape
-
-
-
-        
         callbacks = []
-
         for source_image_filename in grouped_image_filenames:
-
+            
             source_annotation_filename = source_image_filename.replace("data_2d_raw", "annotations").replace(".png", ".json")
             assert os.path.exists(source_annotation_filename)
             
@@ -313,17 +307,8 @@ def make_predictions(
                 for class_name, instance_ids in source_instance_ids.items()
             ], dim=0)
             
-            
-            source_pd_boxes_3d = source_boxes_3d.unsqueeze(0)        
-            source_pd_boxes_2d = torch.stack([
-                vsrd.operations.project_box_3d(
-                    box_3d=source_pd_box_3d,
-                    line_indices=LINE_INDICES,
-                    intrinsic_matrix=source_intrinsic_matrix,
-                )
-                for source_pd_box_3d in source_pd_boxes_3d
-            ], dim=0)
-            
+
+            source_pd_boxes_3d = source_boxes_3d.unsqueeze(0)
 
             source_gt_masks = torch.cat([
                 torch.as_tensor(np.stack(list(map(pycocotools.mask.decode, masks.values()))), dtype=torch.float)
@@ -335,51 +320,12 @@ def make_predictions(
             source_gt_boxes_2d = torchvision.ops.masks_to_boxes(source_gt_masks.bool()).unflatten(-1, (2, 2))
             
 
-
-            source_pd_boxes_2d = torchvision.ops.clip_boxes_to_image(
-                boxes=source_pd_boxes_2d.flatten(-2, -1),
-                size=source_gt_masks.shape[-2:],
-            ).unflatten(-1, (2, 2))
             
-            
-        
-
-            source_iou_matrix = torch.nan_to_num(torchvision.ops.box_iou(
-                boxes1=source_pd_boxes_2d.flatten(-2, -1),
-                boxes2=source_gt_boxes_2d.flatten(-2, -1),
-            ))
-
-            source_instance_ids = torch.cat([
-                torch.as_tensor(list(map(int, masks.keys())), dtype=torch.long)
-                for class_name, masks in source_annotation["masks"].items()
-                if class_name in class_names
-            ], dim=0)
-
-            target_gt_indices = source_instance_ids.new_tensor([
-                target_instance_ids.tolist().index(source_instance_id.item())
-                if source_instance_id in target_instance_ids else -1
-                for source_instance_id in source_instance_ids
-            ])
-
-
-            accumulated_iou_matrix[
-                ...,
-                target_gt_indices[target_gt_indices >= 0]
-            ] += source_iou_matrix[..., target_gt_indices >= 0]
-
-            accumulated_cnt_matrix[
-                ...,
-                target_gt_indices[target_gt_indices >= 0]
-            ] += 1
-
-
-
-            def save_prediction(filename, boxes_3d, boxes_2d, confidences):
+            def save_prediction(filename, boxes_3d, boxes_2d):
 
                 prediction = dict(
                     boxes_3d=dict(car=boxes_3d.squeeze(0).tolist()),
                     boxes_2d=dict(car=boxes_2d.tolist()),
-                    confidences=dict(car=confidences.tolist()),
                 )
 
                 os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -394,85 +340,16 @@ def make_predictions(
                 save_prediction,
                 filename=source_prediction_filename,
                 boxes_3d=source_pd_boxes_3d,
-                boxes_2d=source_pd_boxes_2d,
+                boxes_2d=source_gt_boxes_2d,
             ))
 
-        averaged_iou_matrix = accumulated_iou_matrix / accumulated_cnt_matrix
-        matched_pd_indices, matched_gt_indices = vsrd.utils.torch_function(sp.optimize.linear_sum_assignment)(averaged_iou_matrix, maximize=True)
-
-        confidences = averaged_iou_matrix[matched_pd_indices, matched_gt_indices]
-
-        for callback in callbacks:
-            callback(confidences=confidences)
+            for callback in callbacks:
+                callback()
 
 
 
 
 
-def Re_Ordered_the_Dyanmic(target_input_extrinsic_matrices,
-                           target_input_intrinsic_matrices,
-                           target_inputs_boxes_2d,
-                           world_boxes_3d,
-                           original_dynamic_list):
-    
-    target_input_extrinsic_matrices = target_input_extrinsic_matrices.unsqueeze(0)
-    target_input_intrinsic_matrices = target_input_intrinsic_matrices.unsqueeze(0)
-    target_inputs_boxes_2d = target_inputs_boxes_2d.unsqueeze(0)
-    
-
-    
-    camera_boxes_3d = torch.einsum("bmn,b...n->b...m", target_input_extrinsic_matrices, world_boxes_3d)
-    camera_boxes_3d = camera_boxes_3d[..., :-1] / camera_boxes_3d[..., -1:] #(1,4,8,3)---> at source view camera coordinate
-
-    camera_boxes_2d = torch.stack([
-        torch.stack([
-            project_box_3d(
-                box_3d=camera_box_3d,
-                line_indices=LINE_INDICES,
-                intrinsic_matrix=intrinsic_matrix,
-            )
-            for camera_box_3d in camera_boxes_3d
-        ], dim=0)
-        for camera_boxes_3d, intrinsic_matrix
-        in zip(camera_boxes_3d, target_input_intrinsic_matrices)
-    ], dim=0) #(1,4,2,2)
-
-    temp_images = torch.randn(1,3,376,1408)
-    # make sure inside the image: This is the estimated 2D Bounding Boxes
-    camera_boxes_2d = torchvision.ops.clip_boxes_to_image(
-        boxes=camera_boxes_2d.flatten(-2, -1),
-        size=temp_images.shape[-2:],
-    ).unflatten(-1, (2, 2))  #(1,4,2,2)
-
-
-    # bipartite_matching
-    matching_cost_matrices = [
-        -torchvision.ops.distance_box_iou(
-            boxes1=pd_boxes_2d.flatten(-2, -1),
-            boxes2=gt_boxes_2d.flatten(-2, -1),
-        )
-        for pd_boxes_2d, gt_boxes_2d
-        in zip(camera_boxes_2d, target_inputs_boxes_2d)
-        ]
-    
-    matched_indices = list(map(
-        utils.torch_function(sp.optimize.linear_sum_assignment),
-        matching_cost_matrices,
-    )) 
-    
-    initial_estimated_matched_indices, initial_gt_matched_indices = matched_indices[0]
-    initial_estimated_matched_indices_list = initial_estimated_matched_indices.cpu().numpy().tolist() # list for estimated 
-    initial_gt_matched_indices_list = initial_gt_matched_indices.cpu().numpy().tolist() # list for GT
-    
-    revised_original_dynamic_list = calculate_framewise_dynamic_mask(
-                    N=len(initial_gt_matched_indices_list),
-                    target_frame_dynamic_list=original_dynamic_list,
-                    target_frame_matched_indices=initial_gt_matched_indices_list,
-                    source_frame_matched_indices=initial_estimated_matched_indices_list)
-    
-    return revised_original_dynamic_list
-
-        
 def calculate_framewise_dynamic_mask(N, target_frame_dynamic_list, target_frame_matched_indices, source_frame_matched_indices):
     # 初始化List B_Mask为全False
     B_Mask = [False] * N
@@ -489,9 +366,11 @@ def calculate_framewise_dynamic_mask(N, target_frame_dynamic_list, target_frame_
 def main(args):
 
     sequences = list(map(os.path.basename, sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*")))))
-    dynamic_seqences = [sequences[2],sequences[6]]
+    # dynamic_seqences = [sequences[2],sequences[6]] # for ablation studies
+    dynamic_seqences = sequences
     
-
+    
+    # dynamic_seqences = sequences
     with multiprocessing.Pool(args.num_workers) as pool:
 
         with tqdm(total=len(sequences)) as progress_bar:
@@ -515,7 +394,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description="VSRD++: Prediction Maker for KITTI-360")
     parser.add_argument("--root_dirname", type=str, default="/media/zliu/data12/dataset/VSRD_PP_Sync/")
     parser.add_argument("--ckpt_dirname", type=str, default="ckpts/kitti_360/vsrd")
-    parser.add_argument("--ckpt_filename", type=str, default="step_2999.pt")
+    parser.add_argument("--ckpt_filename", type=str, default="step_2499.pt")
     parser.add_argument("--dyanmic_root_filename",type=str,default="None")
     parser.add_argument("--input_model_type",type=str,default="None",help="Selected from [vanilla,velocity,mlp,velocity_with_init]")
     

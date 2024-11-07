@@ -83,9 +83,6 @@ def convert_predictions(sequence, root_dirname, ckpt_dirname, class_names,json_f
 
     
     for prediction_filename in prediction_filenames:
-        
-
-        
         with open(prediction_filename) as file:
             prediction = json.load(file)
 
@@ -195,9 +192,9 @@ def convert_predictions(sequence, root_dirname, ckpt_dirname, class_names,json_f
 def main(args):
 
     sequences = list(map(os.path.basename, sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*")))))
-    dynamic_seqences = [sequences[2],sequences[6]]
+    # dynamic_seqences = [sequences[2],sequences[6]] # for ablations
     
-
+    dynamic_seqences = sequences
 
     with multiprocessing.Pool(args.num_workers) as pool:
         with tqdm.tqdm(total=len(sequences)) as progress_bar:

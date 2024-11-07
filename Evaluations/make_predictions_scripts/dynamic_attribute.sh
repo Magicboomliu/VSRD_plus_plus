@@ -2,9 +2,9 @@ Dynamic_Atrribute(){
 cd ..
 cd tools/Dyanmic_Attribute
 ROOT_DIRNAME="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-CKPT_DIRNAME="/home/zliu/CVPR25_Ablations/Ablations/VSRDPP_Abaltions_MLP/"
+CKPT_DIRNAME="/media/zliu/data12/dataset/Tsubame_Results/V1/ckpts/"
 JSON_FOLDERNAME="predictions"
-OUTPUT_LABELNAME='label_vsrd_pp_mlp_only'
+OUTPUT_LABELNAME='label_vsrd_pp_full_completed'
 NUM_WORKERS=4
 DYNAMIC_THRESHOLD=0.01
 

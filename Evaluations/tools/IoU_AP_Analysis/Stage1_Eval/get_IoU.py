@@ -23,6 +23,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 from vsrd.operations.kitti360_operations import box3dIou
+from tqdm import tqdm
 
 
 def change_dimension(corners):
@@ -62,7 +63,7 @@ def main(args):
     
     a = 0
     
-    for seq_name in sequences:
+    for seq_name in tqdm(sequences):
         
         mean_3d_iou_seq_all = 0
         mean_bev_iou_seq_all = 0
@@ -72,7 +73,6 @@ def main(args):
         mean_bev_iou_seq_dynamic = 0
         
         
-        
         seq_counter_all = 0
         seq_counter_static = 0
         seq_counter_dynamic = 0
@@ -80,7 +80,7 @@ def main(args):
         pd_seq_folder = os.path.join(prediction_folder,seq_name,"image_00/data_rect/")
         gt_seq_folder = os.path.join(gt_folder,seq_name,"image_00/data_rect/")
         
-        for idx, fname in enumerate(os.listdir(pd_seq_folder)):
+        for fname in tqdm(os.listdir(pd_seq_folder)):
             pd_label_path = os.path.join(pd_seq_folder,fname)
             gt_label_path_with_dynamic = os.path.join(gt_seq_folder,fname)
             
@@ -273,15 +273,6 @@ def main(args):
     
 
 
-
-
-        
-        
-    
-    
-        
-
-            
 
 def bilateral_matching(boxes1, boxes2,dynamic_list,rot,difficulity_list):
 

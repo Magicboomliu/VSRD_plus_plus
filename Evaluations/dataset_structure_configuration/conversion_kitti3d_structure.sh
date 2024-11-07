@@ -4,11 +4,11 @@ cd ..
 cd tools/organize_to_kitti3d_dataset_structure/
 
 ROOT_DIRNAME="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-PREDICTION_LABEL_PATH="/media/zliu/data12/dataset/VSRD_PP_Sync/Ablations/VSRD_Velcoity_Only/label_vsrd_pp_velocity_only/predictions/"
-GT_LABEL_PATH="/media/zliu/data12/dataset/VSRD_PP_Sync/Ablations/VSRD_Velcoity_Only/label_vsrd_pp_velocity_only/my_gts_with_dynamic/"
-OUTPUT_FOLDER="/media/zliu/data12/dataset/KITTI3D_Velocity_Only"
-TRAINING_SPLIT="03,07" 
-TESTING_SPLIT="03"
+PREDICTION_LABEL_PATH="/media/zliu/data12/dataset/VSRD_PP_Sync/label_vsrd_pp_full_completed/predictions/"
+GT_LABEL_PATH="/media/zliu/data12/dataset/VSRD_PP_Sync/label_vsrd_pp_full_completed/my_gts_with_dynamic/"
+OUTPUT_FOLDER="/media/zliu/data12/dataset/KITTI360_Tsubame_ALL"
+TRAINING_SPLIT="00,02,04,05,06,09" 
+TESTING_SPLIT="10"
 
 
 

@@ -53,46 +53,47 @@ def get_organized_data(annotation_filename,class_names=['car']):
     if ('masks' in annotation.keys()) and ("boxes_3d" in annotation.keys()):
         if 'car' in annotation['boxes_3d'].keys():
             
-            intrinsic_matrix = annotation['intrinsic_matrix']
-            extrinsic_matrix = annotation['extrinsic_matrix']
+            if len(annotation['boxes_3d']['car'])>0:
+                intrinsic_matrix = annotation['intrinsic_matrix']
+                extrinsic_matrix = annotation['extrinsic_matrix']
 
-            instance_ids = {
-                class_name: list(masks.keys())
-                for class_name, masks in annotation["masks"].items()
-                if class_name in class_names
-            }
+                instance_ids = {
+                    class_name: list(masks.keys())
+                    for class_name, masks in annotation["masks"].items()
+                    if class_name in class_names
+                }
 
-            gt_class_names = sum([
-                [class_name] *  len(instance_ids)
-                for class_name, instance_ids in instance_ids.items()
-            ], [])
+                gt_class_names = sum([
+                    [class_name] *  len(instance_ids)
+                    for class_name, instance_ids in instance_ids.items()
+                ], [])
+                
+
+                gt_boxes_3d = torch.cat([
+                    torch.as_tensor([
+                        annotation["boxes_3d"][class_name].get(instance_id, [[np.nan] * 3] * 8)
+                        for instance_id in instance_ids
+                    ], dtype=torch.float)
+                    for class_name, instance_ids in instance_ids.items()
+                ], dim=0)
+
+
+                gt_masks = torch.cat([
+                    torch.as_tensor(np.stack([
+                        pycocotools.mask.decode(annotation["masks"][class_name][instance_id])
+                        for instance_id in instance_ids
+                    ]), dtype=torch.float)
+                    for class_name, instance_ids in instance_ids.items()
+                ], dim=0)
+
+                gt_boxes_2d = torchvision.ops.masks_to_boxes(gt_masks).unflatten(-1, (2, 2))
+
+                instance_ids = instance_ids['car']
             
-
-
-
-            gt_boxes_3d = torch.cat([
-                torch.as_tensor([
-                    annotation["boxes_3d"][class_name].get(instance_id, [[np.nan] * 3] * 8)
-                    for instance_id in instance_ids
-                ], dtype=torch.float)
-                for class_name, instance_ids in instance_ids.items()
-            ], dim=0)
-
-
-            gt_masks = torch.cat([
-                torch.as_tensor(np.stack([
-                    pycocotools.mask.decode(annotation["masks"][class_name][instance_id])
-                    for instance_id in instance_ids
-                ]), dtype=torch.float)
-                for class_name, instance_ids in instance_ids.items()
-            ], dim=0)
-
-            gt_boxes_2d = torchvision.ops.masks_to_boxes(gt_masks).unflatten(-1, (2, 2))
-
-            instance_ids = instance_ids['car']
-        
-        
-            return instance_ids,gt_boxes_3d,gt_masks,gt_boxes_2d,extrinsic_matrix,intrinsic_matrix
+            
+                return instance_ids,gt_boxes_3d,gt_masks,gt_boxes_2d,extrinsic_matrix,intrinsic_matrix
+            else:
+                return None,None,None,None,None,None
 
         else:
             return None,None,None,None,None,None
@@ -250,39 +251,58 @@ def dynamic_attribute_func(sequence, root_dirname, ckpt_dirname, class_names,jso
         instance_ids,gt_boxes_3d,gt_masks,gt_boxes_2d,_,_ = get_organized_data(annotation_filename=annotation_filename,
                                                                                class_names=class_names)
         
+        
+        if gt_boxes_3d ==None:
+            continue
+
+
+        
         resultd_dict = get_neighbor_search_x(current_annotation_name=annotation_filename,
                                              threshold=threshold)
         
-        assert resultd_dict['instance_ids'] == instance_ids
-        assert resultd_dict['boxed_3d'].mean() == gt_boxes_3d.mean()
-        assert resultd_dict['boxed_2d'].mean() == gt_boxes_2d.mean()
-        
-        
-        dynamic_label_list = resultd_dict['dynamic_label']
-        
-        gt_class_names = ['car'] * len(dynamic_label_list)
-        my_gt_filename = prediction_filename.replace("predictions",'my_gts_with_dynamic')
-        
-        label_dirname = os.path.join(output_labelname, os.path.basename(ckpt_dirname))
-        label_filename = os.path.splitext(os.path.relpath(my_gt_filename, root_dirname))[0]
-        label_filename = os.path.join(root_dirname, label_dirname, f"{label_filename}.txt")
-    
-        os.makedirs(os.path.dirname(label_filename), exist_ok=True)
+        try:
+            assert resultd_dict['instance_ids'] == instance_ids
+            assert resultd_dict['boxed_3d'].mean() == gt_boxes_3d.mean()
+            assert resultd_dict['boxed_2d'].mean() == gt_boxes_2d.mean()
 
-        save_prediction(
-            filename=label_filename,
-            class_names=gt_class_names,
-            boxes_3d=gt_boxes_3d,
-            boxes_2d=gt_boxes_2d,
-            scores=torch.ones(len(gt_class_names)),
-            labels=dynamic_label_list)
+            dynamic_label_list = resultd_dict['dynamic_label']
+            
+            gt_class_names = ['car'] * len(dynamic_label_list)
+            my_gt_filename = prediction_filename.replace("predictions",'my_gts_with_dynamic')
+            
+            label_dirname = os.path.join(output_labelname, os.path.basename(ckpt_dirname))
+            label_filename = os.path.splitext(os.path.relpath(my_gt_filename, root_dirname))[0]
+            label_filename = os.path.join(root_dirname, label_dirname, f"{label_filename}.txt")
+        
+            os.makedirs(os.path.dirname(label_filename), exist_ok=True)
+
+            save_prediction(
+                filename=label_filename,
+                class_names=gt_class_names,
+                boxes_3d=gt_boxes_3d,
+                boxes_2d=gt_boxes_2d,
+                scores=torch.ones(len(gt_class_names)),
+                labels=dynamic_label_list)
+        except:
+            continue
+        
+        
+
+            
+        
+
         
         
 
 def main(args):
 
     sequences = list(map(os.path.basename, sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*")))))
-    dynamic_seqences = [sequences[2],sequences[6]]
+    # dynamic_seqences = [sequences[2],sequences[6]] # for ablation studies
+    
+    dynamic_seqences = [sequences[3]]
+    
+    # dynamic_seqences.remove('2013_05_28_drive_0004_sync')
+
 
 
     with multiprocessing.Pool(args.num_workers) as pool:

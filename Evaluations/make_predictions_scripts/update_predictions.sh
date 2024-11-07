@@ -2,7 +2,7 @@ Update_Predictions(){
 cd ..
 cd tools/Predictions
 ROOT_DIRNAME="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-CKPT_DIRNAME="/home/zliu/CVPR25_Ablations/Ablations/VSRD_PP_FULL/ckpts/VSRDPP_FULL/"
+CKPT_DIRNAME="/media/zliu/data12/dataset/Tsubame_Results/V1/ckpts/"
 OUT_DIRNAME="updated_pred"
 
 

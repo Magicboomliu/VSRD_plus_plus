@@ -2,9 +2,9 @@ Make_Json_Prediction(){
 cd ..
 cd tools/Predictions
 ROOT_DIRNAME="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-CKPT_DIRNAME="/home/zliu/CVPR25_Ablations/Ablations/VSRD_Velocity_Only/ckpts/VSRDPP_Abaltions_Velocity_ONLY_V2/"
+CKPT_DIRNAME="/media/zliu/data12/dataset/Tsubame_Results/V1/ckpts/"
 DYNAMIC_DIRNAME="/media/zliu/data12/dataset/VSRD_PP_Sync/est_dynamic_list/"
-INPUT_MODEL_TYPE="velocity_only"
+INPUT_MODEL_TYPE="velocity_with_init"
 
 NUM_WORKERS=4
 

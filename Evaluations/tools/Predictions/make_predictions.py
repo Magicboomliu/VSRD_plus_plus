@@ -93,7 +93,6 @@ def decode_box_3d(locations, dimensions, orientations,residual=None):
     
     return boxes
 
-
 LINE_INDICES = [
     [0, 1], [1, 2], [2, 3], [3, 0],
     [4, 5], [5, 6], [6, 7], [7, 4],
@@ -103,14 +102,12 @@ LINE_INDICES = [
 def main(args):
 
     sequences = list(map(os.path.basename, sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*")))))
-    
-    dynamic_seqences = [sequences[2],sequences[6]]
+    # dynamic_seqences = [sequences[2],sequences[6]] # for ablation studies
+    dynamic_seqences = sequences # for all the results
 
 
     with multiprocessing.Pool(args.num_workers) as pool:
-
         with tqdm(total=len(sequences)) as progress_bar:
-
             for _ in pool.imap_unordered(functools.partial(
                 make_predictions,
                 root_dirname=args.root_dirname,
@@ -122,7 +119,6 @@ def main(args):
             ), dynamic_seqences):
 
                 progress_bar.update(1)
-
 
 def make_predictions(
     sequence,
@@ -160,8 +156,8 @@ def make_predictions(
             tuple(map(int, line.split(" ")[0].split(","))): [int(float(item)) for item in line.split(" ")[2].split(",")] 
             for line in map(str.strip, file)
         }
-
-
+        
+    
     for instance_ids, grouped_image_filenames in grouped_image_filenames.items():
         
         # get the target image filename
@@ -173,14 +169,14 @@ def make_predictions(
         target_image_dirname = os.path.splitext(os.path.relpath(target_image_filename, root_dirname))[0]
         # get the models ckpts
         target_ckpt_filename = os.path.join(ckpt_dirname, target_image_dirname, ckpt_filename)
-        
 
-        assert os.path.exists(target_ckpt_filename)
-        assert os.path.exists(target_image_filename)
 
         if not os.path.exists(target_ckpt_filename):
             print(f"[{target_ckpt_filename}] Does not exist!")
             continue
+
+        assert os.path.exists(target_ckpt_filename)
+        assert os.path.exists(target_image_filename)
 
         target_checkpoint = torch.load(target_ckpt_filename, map_location="cpu")
         num_instances = target_checkpoint["models"]["detector"]["embeddings"].shape[1]
@@ -345,8 +341,6 @@ def make_predictions(
                     for source_pd_box_3d in source_pd_boxes_3d
                 ], dim=0)
                 
-                
-
                 source_gt_masks = torch.cat([
                     torch.as_tensor(np.stack(list(map(pycocotools.mask.decode, masks.values()))), dtype=torch.float)
                     for class_name, masks in source_annotation["masks"].items()
@@ -404,7 +398,7 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join("predictions", os.path.basename(ckpt_dirname))
+                source_prediction_dirname = os.path.join(args.saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
                 source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
                 
 
@@ -613,7 +607,7 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join("predictions", os.path.basename(ckpt_dirname))
+                source_prediction_dirname = os.path.join(args.saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
                 source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
                 
 
@@ -850,7 +844,7 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join("predictions", os.path.basename(ckpt_dirname))
+                source_prediction_dirname = os.path.join(args.saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
                 source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
                 
 
@@ -1076,7 +1070,7 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join("predictions", os.path.basename(ckpt_dirname))
+                source_prediction_dirname = os.path.join(args.saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
                 source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
                 
 
@@ -1094,9 +1088,7 @@ def make_predictions(
 
             for callback in callbacks:
                 callback(confidences=confidences)
-        
-        
-                
+                        
 def Re_Ordered_the_Dyanmic(target_input_extrinsic_matrices,
                            target_input_intrinsic_matrices,
                            target_inputs_boxes_2d,
@@ -1106,8 +1098,6 @@ def Re_Ordered_the_Dyanmic(target_input_extrinsic_matrices,
     target_input_extrinsic_matrices = target_input_extrinsic_matrices.unsqueeze(0)
     target_input_intrinsic_matrices = target_input_intrinsic_matrices.unsqueeze(0)
     target_inputs_boxes_2d = target_inputs_boxes_2d.unsqueeze(0)
-    
-
     
     camera_boxes_3d = torch.einsum("bmn,b...n->b...m", target_input_extrinsic_matrices, world_boxes_3d)
     camera_boxes_3d = camera_boxes_3d[..., :-1] / camera_boxes_3d[..., -1:] #(1,4,8,3)---> at source view camera coordinate
@@ -1159,21 +1149,17 @@ def Re_Ordered_the_Dyanmic(target_input_extrinsic_matrices,
                     source_frame_matched_indices=initial_estimated_matched_indices_list)
     
     return revised_original_dynamic_list
-        
+
 def calculate_framewise_dynamic_mask(N, target_frame_dynamic_list, target_frame_matched_indices, source_frame_matched_indices):
-    # 初始化List B_Mask为全False
     B_Mask = [False] * N
-    # 遍历List A的每一个索引
     for i in range(N):
       A_index = target_frame_matched_indices[i]
       B_index = source_frame_matched_indices[i]
-
       Bool_value = target_frame_dynamic_list[A_index]
       B_Mask[B_index] = Bool_value
       
     return B_Mask
 
-        
     
 if __name__=="__main__":
     
@@ -1181,10 +1167,11 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description="VSRD++: Prediction Maker for KITTI-360")
     parser.add_argument("--root_dirname", type=str, default="/media/zliu/data12/dataset/VSRD_PP_Sync/")
     parser.add_argument("--ckpt_dirname", type=str, default="ckpts/kitti_360/vsrd")
-    parser.add_argument("--ckpt_filename", type=str, default="step_2999.pt")
+    parser.add_argument("--ckpt_filename", type=str, default="step_2499.pt")
     parser.add_argument("--dyanmic_root_filename",type=str,default="None")
     parser.add_argument("--input_model_type",type=str,default="None",help="Selected from [vanilla,velocity,mlp,velocity_with_init]")
-    
+    parser.add_argument("--saved_pseudo_folder_path",type=str,default="predictions",
+                        help="Selected from [vanilla,velocity,mlp,velocity_with_init]")
     
     parser.add_argument("--split_dirname", type=str, default="R50-N16-M128-B16")
     parser.add_argument("--class_names", type=str, nargs="+", default=["car"])
