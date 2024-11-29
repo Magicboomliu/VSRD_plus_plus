@@ -25,7 +25,13 @@ def read_text_lines(filepath):
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--img', help='Image file')
+    parser.add_argument('--datapath', type=str,help='datapath',
+                        default="/media/zliu/data12/dataset/VSRD_PP_Sync/")
+    parser.add_argument('--threshold',type=float,default=0.3,help='Image file')
+    parser.add_argument('--filename_list', type=str,
+                        help='datapath',
+                        default="filenames/KITTI360_DataAll.txt")
+    
     parser.add_argument('--config', help='Config file')
     parser.add_argument('--checkpoint', help='Checkpoint file')
     parser.add_argument('--out', type=str, default="demo", help='out dir')
@@ -42,8 +48,7 @@ def parse_args():
         '--async-test',
         action='store_true',
         help='whether to set async options for async inference.')
-    parser.add_argument('--filelist', help='Image file')
-    parser.add_argument('--datapath', help='Image file')
+
 
     args = parser.parse_args()
     return args
@@ -82,21 +87,27 @@ def FilterOut_WithThreshold(threshold,detection_cars):
 
 
 def main(args):
-    model = init_detector(args.config, args.checkpoint, device=args.device)
-
-
-    DATAPATH = "/media/zliu/data12/dataset/VSRD_PP_Sync/"
-    image_txt = "/home/zliu/VSRD_plus_plus/preprocessing/segmentation/detection/filenames/KITTI360_DataAll.txt"
-    lines = read_text_lines(image_txt)
-
-    threshold1 = 0.5
-    threshold2 = 0.5
+    
+    
+    DATAPATH = args.datapath
+    image_txt = args.filename_list
+    threshold = args.threshold
     car_existence = False
+    
+    if threshold==0.3:
+        estimated_2d_boxes = "det2d/threshold05"
+    elif threshold==0.5:
+        estimated_2d_boxes = "det2d/threshold05"
+    else:
+        raise NotImplementedError
+
+    lines = read_text_lines(image_txt)
+    
+    
+    model = init_detector(args.config, args.checkpoint, device=args.device)
 
     for line in tqdm(lines):
         line = os.path.join(DATAPATH,line)
-        
-
         result = inference_detector(model, line) # results is a tuple
         classes_categories = model.CLASSES
         detection_results = result[0]
@@ -104,7 +115,7 @@ def main(args):
         
         
         if detection_results.shape[0]>0:
-            detection_results_filtered =FilterOut_WithThreshold(threshold=threshold1,detection_cars=detection_results)
+            detection_results_filtered =FilterOut_WithThreshold(threshold=threshold,detection_cars=detection_results)
             filter_out_nums = detection_results_filtered.shape[0]
             if filter_out_nums>0:
                 car_existence = True
@@ -116,26 +127,14 @@ def main(args):
                 savd_det2d = np.ones((filter_out_nums,6)).astype(np.str_)
                 savd_det2d[:,0] = np.array(['Car']*filter_out_nums)
                 savd_det2d[:,1:] = detection_results_filtered
-                line = line.replace("data_2d_raw","det2d/threshold05")
+                line = line.replace("data_2d_raw",estimated_2d_boxes)
                 line = line.replace(".png",".txt")
                 saved_folder_name = line[:-len(os.path.basename(line))]
-                
-
-                
+            
                 if not os.path.exists(saved_folder_name):
                     os.makedirs(saved_folder_name)
                 np.savetxt(line,savd_det2d,fmt = '%s')
-        # if idx%10==0:
-        #     print("Processed {}/{}".format(idx,len(lines)))
  
-
-
-
-
-    
-        
-
-
 
 
 if __name__=="__main__":
