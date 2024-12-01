@@ -16,5 +16,22 @@ For the reason that the pseudo labels created by the VSRD or VSRD++ are recommen
 cd preprocessing/segmentation/detection/scripts
 sh generated_2d_bounding_box.sh
 ```
-The generated bounding box can be also direcly downloaded [here](https://drive.google.com/file/d/1-ybJmeeQSF-WVm8r0UED53rKjBLEWh6R/view?usp=sharing)
+The generated bounding box can be also direcly downloaded [here](https://drive.google.com/file/d/1-ybJmeeQSF-WVm8r0UED53rKjBLEWh6R/view?usp=sharing). 
 
+
+## Step 2: Symbol-Link the psuedo labels into KITTI3D Format. 
+
+For the reason that the generated pseudo labels with the same name of the KITTI360 filename, we **re-organized** the structure the pseduo labels with the same structure and the filename.   
+
+we provide two kinds of methods to split the training and the validation sets.
+- CVPR 2024 Split (Splited by the Sequential Name)
+- PAMI 2025 Split (Splited by the Dynamic/Static)
+
+
+- Re-organize the Pseudo Labels.
+
+```
+```
+- Replace the Pseudo Labels 2D Detections with Intern-Image
+```
+```
