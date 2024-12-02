@@ -31,7 +31,27 @@ we provide two kinds of methods to split the training and the validation sets.
 - Re-organize the Pseudo Labels.
 
 ```
+cd Monocular3D/preprocessing/scripts
+# switch the scripts into sequences-based (VSRD) splits  `SPLIT_THE_FNAME_BY_SEQUENCE` 
+
+sh pre_dataset_fname_split.sh
+
+`SPLIT_THE_FNAME_BY_DYNAMIC`
+
+sh pre_dataset_fname_split.sh
 ```
+
 - Replace the Pseudo Labels 2D Detections with Intern-Image
 ```
+cd Monocular3D/preprocessing/scripts
+
+sh post_dataset_fname_processing.sh
 ```
+
+
+## Training of the Monocular Depth Estimators
+Please refer to different branchs to train the monocular depth estimators.
+
+- MonoFlex
+- MonoDeTR
+- WeakM3D
