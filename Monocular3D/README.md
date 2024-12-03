@@ -32,11 +32,11 @@ we provide two kinds of methods to split the training and the validation sets.
 
 ```
 cd Monocular3D/preprocessing/scripts
-# switch the scripts into sequences-based (VSRD) splits  `SPLIT_THE_FNAME_BY_SEQUENCE` 
+# switch the scripts into sequences-based (VSRD) splits  #`SPLIT_THE_FNAME_BY_SEQUENCE` 
 
 sh pre_dataset_fname_split.sh
 
-`SPLIT_THE_FNAME_BY_DYNAMIC`
+# `SPLIT_THE_FNAME_BY_DYNAMIC`
 
 sh pre_dataset_fname_split.sh
 ```
@@ -46,6 +46,20 @@ sh pre_dataset_fname_split.sh
 cd Monocular3D/preprocessing/scripts
 
 sh post_dataset_fname_processing.sh
+```
+
+### Attention !
+
+Note that the above code for generated the static/dynamic splits contains some `random` inside it. In order to reproduce the results, please using the following `sync_relationship` and the `ImageSets`.
+
+- [Sync Relationship Files & ImageSets Files](https://drive.google.com/file/d/1FJBaB4ATNj3D4yICc_XpohKQU_WcpNGy/view?usp=sharing) 
+
+```
+cd Monocular3D/preprocessing/scripts
+
+# `SPLIT_THE_FNAME_BY_DYNAMIC_From_SYNC_FILE`
+sh pre_dataset_fname_split.sh
+
 ```
 
 
