@@ -289,6 +289,7 @@ if __name__=="__main__":
 
 
         base_filename = f"{str(idx).zfill(6)}"
+        testing_filename_splits_ImageSets_list.append(base_filename)
             
         testing_sync_target_image_2 = os.path.join(output_folder_testing_image_2_folder_path,base_filename+".png")
         testing_sync_target_image_3 = os.path.join(output_folder_testing_image_3_folder_path,base_filename+".png")
