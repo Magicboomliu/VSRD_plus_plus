@@ -12,6 +12,7 @@ import torchvision
 import numpy as np
 import pycocotools.mask
 
+
 def encode_box_3d(boxes_3d):
 
     locations = torch.mean(boxes_3d, dim=-2)
@@ -77,12 +78,12 @@ def save_prediction(filename, class_names, boxes_3d, boxes_2d, scores):
 def convert_predictions(sequence, root_dirname, ckpt_dirname, class_names,json_folder,output_labelname):
     
 
-    prediction_dirname = os.path.join(json_folder, os.path.basename(ckpt_dirname))
-    prediction_filenames = sorted(glob.glob(os.path.join(root_dirname, prediction_dirname, sequence, "image_00", "data_rect", "*.json")))
+    prediction_dirname = json_folder
+    prediction_filenames = sorted(glob.glob(os.path.join(ckpt_dirname, prediction_dirname, sequence, "image_00", "data_rect", "*.json")))
 
 
     
-    for prediction_filename in prediction_filenames:
+    for prediction_filename in tqdm.tqdm(prediction_filenames):
         with open(prediction_filename) as file:
             prediction = json.load(file)
 
@@ -111,13 +112,10 @@ def convert_predictions(sequence, root_dirname, ckpt_dirname, class_names,json_f
         ], dim=0)
         
 
-
-        if '/' in prediction_dirname:
-            prediction_dirname = prediction_dirname[:-1]
-
-        
-
         annotation_filename = prediction_filename.replace(prediction_dirname, "annotations")
+        annotation_filename = annotation_filename.replace(ckpt_dirname,root_dirname)
+        assert os.path.exists(annotation_filename)
+        
 
         with open(annotation_filename) as file:
             annotation = json.load(file)
@@ -151,15 +149,15 @@ def convert_predictions(sequence, root_dirname, ckpt_dirname, class_names,json_f
 
         gt_boxes_2d = torchvision.ops.masks_to_boxes(gt_masks).unflatten(-1, (2, 2))
         
-        
-
-
+    
         if not torch.all(torch.isfinite(gt_boxes_3d)): continue
 
-        label_dirname = os.path.join(output_labelname, os.path.basename(ckpt_dirname))
-        label_filename = os.path.splitext(os.path.relpath(prediction_filename, root_dirname))[0]
-        label_filename = os.path.join(root_dirname, label_dirname, f"{label_filename}.txt")
-
+        
+        
+        label_filename = prediction_filename.replace(ckpt_dirname,output_labelname).replace(".json",'.txt')
+        if os.path.exists(label_filename):
+            continue
+        
         os.makedirs(os.path.dirname(label_filename), exist_ok=True)
 
         save_prediction(
@@ -170,29 +168,29 @@ def convert_predictions(sequence, root_dirname, ckpt_dirname, class_names,json_f
             scores=pd_confidences,
         )
 
-        my_gt_filename = prediction_filename.replace(json_folder,'my_gts')
+        # my_gt_filename = prediction_filename.replace(json_folder,'my_gts')
         
-        label_dirname = os.path.join(output_labelname, os.path.basename(ckpt_dirname))
-        label_filename = os.path.splitext(os.path.relpath(my_gt_filename, root_dirname))[0]
-        label_filename = os.path.join(root_dirname, label_dirname, f"{label_filename}.txt")
+        # label_dirname = os.path.join(output_labelname, os.path.basename(ckpt_dirname))
+        # label_filename = os.path.splitext(os.path.relpath(my_gt_filename, root_dirname))[0]
+        # label_filename = os.path.join(root_dirname, label_dirname, f"{label_filename}.txt")
         
         
 
-        os.makedirs(os.path.dirname(label_filename), exist_ok=True)
+        # os.makedirs(os.path.dirname(label_filename), exist_ok=True)
 
 
-        save_prediction(
-            filename=label_filename,
-            class_names=gt_class_names,
-            boxes_3d=gt_boxes_3d,
-            boxes_2d=gt_boxes_2d,
-            scores=torch.ones(len(gt_class_names)),
-        )
+        # save_prediction(
+        #     filename=label_filename,
+        #     class_names=gt_class_names,
+        #     boxes_3d=gt_boxes_3d,
+        #     boxes_2d=gt_boxes_2d,
+        #     scores=torch.ones(len(gt_class_names)),
+        # )
 
 def main(args):
 
     sequences = list(map(os.path.basename, sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*")))))
-    # dynamic_seqences = [sequences[2],sequences[6]] # for ablations
+
     
     dynamic_seqences = sequences
 

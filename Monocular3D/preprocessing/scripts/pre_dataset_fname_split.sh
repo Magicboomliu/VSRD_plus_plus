@@ -3,13 +3,13 @@ SPLIT_THE_FNAME_BY_SEQUENCE(){
 cd ..
 cd dataset_split/pre_dataset_split
 
-root_dirname="/data1/liu/VSRD_PP_Sync/"
-pseudo_labels_dirname="/data1/liu/VSRDPP_Tsubame_Results/VSRDPP_Pesudo_Labels/"
+root_dirname="/media/zliu/data12/dataset/VSRD_PP_Sync/"
+pseudo_labels_dirname="/media/zliu/data12/dataset/CVPR24_VSRD_Results/VSRDPP_Pesudo_Labels/"
 training_split="00,02,04,05,06,09"
 valiation_split="03,07"
 testing_split="10"
-output_dataset_path="/data1/liu/TPAMI25_Stage2_Datasets/VSRD_SPLIT"
-output_dataset_splits_filename_path="/data1/liu/TPAMI25_Stage2_Datasets/VSRD_SPLIT"
+output_dataset_path="/media/zliu/data12/dataset/TPAMI_Stage2/NEW_VSRDPP25_LABEL/VSRD_SPLIT"
+output_dataset_splits_filename_path="/media/zliu/data12/dataset/TPAMI_Stage2/NEW_VSRDPP25_LABEL/VSRD_SPLIT"
 
 python split_by_sequences.py    --pseudo_labels_dirname $pseudo_labels_dirname \
                                 --root_dirname $root_dirname \
@@ -55,11 +55,11 @@ SPLIT_THE_FNAME_BY_DYNAMIC_From_SYNC_FILE(){
 cd ..
 cd dataset_split/pre_dataset_split
 
-root_dirname="/data1/liu/VSRD_PP_Sync/"
-pseudo_labels_dirname="/data1/liu/VSRDPP_Tsubame_Results/VSRDPP_Pesudo_Labels/"
-output_dataset_path="/data1/liu/TPAMI25_Stage2_Datasets/VSRD_PP_SPLIT"
-output_dataset_splits_filename_path="/data1/liu/TPAMI25_Stage2_Datasets/VSRD_PP_SPLIT"
-sync_folder_path="/home/zliu/TPAMI25/FilesForUpload"
+root_dirname="/media/zliu/data12/dataset/VSRD_PP_Sync/"
+pseudo_labels_dirname="/media/zliu/data12/dataset/CVPR24_VSRD_Results/VSRDPP_Pesudo_Labels/"
+output_dataset_path="/media/zliu/data12/dataset/TPAMI_Stage2/NEW_VSRDPP25_LABEL/VSRD_PP_SPLIT"
+output_dataset_splits_filename_path="/media/zliu/data12/dataset/TPAMI_Stage2/NEW_VSRDPP25_LABEL/VSRD_PP_SPLIT"
+sync_folder_path="/home/zliu/TPAMI25/Sync_Files/"
 
 python split_dynamic_static_by_sync_file.py --root_dirname $root_dirname \
                                     --pseudo_labels_dirname $pseudo_labels_dirname \
@@ -71,13 +71,8 @@ python split_dynamic_static_by_sync_file.py --root_dirname $root_dirname \
 
 
 
-
-
-
 # SPLIT_THE_FNAME_BY_SEQUENCE
 
-
-#SPLIT_THE_FNAME_BY_DYNAMIC
-
+# SPLIT_THE_FNAME_BY_DYNAMIC
 
 SPLIT_THE_FNAME_BY_DYNAMIC_From_SYNC_FILE

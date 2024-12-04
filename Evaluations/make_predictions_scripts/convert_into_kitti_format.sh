@@ -2,9 +2,9 @@ Convert_To_KITTI_Format(){
 cd ..
 cd tools/Predictions
 ROOT_DIRNAME="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-CKPT_DIRNAME="/media/zliu/data12/dataset/Tsubame_Results/V1/ckpts/"
+CKPT_DIRNAME="/media/zliu/data12/dataset/CVPR24_VSRD_Results/VSRD24_Old/"
 JSON_FOLDERNAME="predictions"
-OUTPUT_LABELNAME='label_vsrd_pp_full_completed'
+OUTPUT_LABELNAME='/media/zliu/data12/dataset/CVPR24_VSRD_Results//VSRD24_TXT/'
 NUM_WORKERS=4
 
 

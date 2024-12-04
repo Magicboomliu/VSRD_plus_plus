@@ -1,6 +1,6 @@
 RANDOM_UPDATE_ESTIMATE_LABEL(){
-estimated_label="/data3/PAMI_Datasets/Replace_Version/VSRD_PP_SPLIT_Ver2/training/label_2/"
-gt_labels="/data3/PAMI_Datasets/Replace_Version/VSRD_PP_SPLIT_Ver1/training/label_gt/"
+estimated_label="/media/zliu/data12/dataset/TPAMI_Stage2/NEW_VSRDPP25_LABEL/Replaced_Version/VSRD_SPLIT_V2/training/label_2/"
+gt_labels="/media/zliu/data12/dataset/TPAMI_Stage2/NEW_VSRDPP25_LABEL/Replaced_Version/VSRD_SPLIT_V2/training/label_gt/"
 ratio=0.05
 
 cd ..

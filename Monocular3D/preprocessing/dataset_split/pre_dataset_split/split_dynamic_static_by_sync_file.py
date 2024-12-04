@@ -209,6 +209,7 @@ if __name__=="__main__":
         current_syned_target_label_2 = os.path.join(output_folder_testing_label_2_folder_path,os.path.basename(training_sync_target_image_2)).replace(".png",".txt")
         assert os.path.exists(current_source_label_2)
         
+        
         # Label GT
         current_source_label_gt =  os.path.join(gt_label_path_with_dynamic,extract_from_2013_regex(source_image_2)).replace(".png",".txt")
         current_syned_target_label_gt = os.path.join(output_folder_testing_label_gt_folder_path,os.path.basename(training_sync_target_image_2)).replace(".png",".txt")
