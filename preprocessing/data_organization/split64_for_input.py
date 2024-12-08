@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument(
         "--root_folder",
         type=str,
-        default="/media/zliu/data12/dataset/VSRD_PP_Sync/",
+        default="/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync",
         help="Path to pretrained model or model identifier from huggingface.co/models.")
 
     parser.add_argument(
