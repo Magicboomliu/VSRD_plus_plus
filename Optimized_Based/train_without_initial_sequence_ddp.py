@@ -111,26 +111,9 @@ def encode_orientation(rotation_matrices):
 
 def main(args=None):
     
-    if args.config_path=='00':
-        from Optimized_Based.configs.train_config_sequence_00 import _C as my_conf_train
-    if args.config_path=='02':
-        from Optimized_Based.configs.train_config_sequence_02 import _C as my_conf_train
-    if args.config_path=='03':
-        from Optimized_Based.configs.train_config_sequence_03 import _C as my_conf_train
-    if args.config_path=='04':
-        from Optimized_Based.configs.train_config_sequence_04 import _C as my_conf_train
-    if args.config_path=='05':
-        from Optimized_Based.configs.train_config_sequence_05 import _C as my_conf_train
-    if args.config_path=='06':
-        from Optimized_Based.configs.train_config_sequence_06 import _C as my_conf_train
-    if args.config_path=='07':
-        from Optimized_Based.configs.train_config_sequence_07 import _C as my_conf_train
-    if args.config_path=='09':
-        from Optimized_Based.configs.train_config_sequence_09 import _C as my_conf_train
-    if args.config_path=='10':
-        from Optimized_Based.configs.train_config_sequence_10 import _C as my_conf_train
+
     if args.config_path=='test':
-        from Optimized_Based.configs.train_config_ddp_debug import _C as my_conf_train
+        from Optimized_Based.configs.train_config_ddp import _C as my_conf_train
     
     
     

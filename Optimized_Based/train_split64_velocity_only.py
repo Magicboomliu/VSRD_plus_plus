@@ -451,10 +451,11 @@ def main(args=None):
             if USE_DYNAMIC_MODELING_FLAG:
                 if USE_DYNAMIC_MASK_FLAG:
                     dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
-                
                     dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
-            
 
+            # without using the location and the velocity
+            initial_loc_and_velo_validaity = False
+            
 
             multi_inputs = Get_Initial_Attributes(multi_inputs=multi_inputs,dynamic_mask_list=dynamic_mask_for_target_view,
                                                   device=device_id)
@@ -462,7 +463,7 @@ def main(args=None):
             gt_velocity = multi_inputs[0]['velo'].float().contiguous().to(device_id)
             gt_orientation = multi_inputs[0]['est_orient'].float().contiguous().to(device_id)
             
-            initial_loc_and_velo_validaity = multi_inputs[0]['LiDAR_Validality']
+
             
             if multi_inputs[0]['gt_loc'] is not None:
                 true_gt_loc = multi_inputs[0]['gt_loc'].float().contiguous().to(device_id)
@@ -470,7 +471,6 @@ def main(args=None):
                     gt_loc = true_gt_loc
             
     
-            
             # initialization
             with torch.no_grad():
                 
@@ -514,9 +514,7 @@ def main(args=None):
                     {'params': models.detector.velocity,'lr':0.005},
                     {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
                 ], lr=0.01)
-                
-
-            
+                            
             elif USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE=="scalar_velocity":
                 optimizer = optim.Adam([
                     {'params': models.detector.locations, 'lr': 0.01},
@@ -549,7 +547,6 @@ def main(args=None):
             saver = utils.Saver(ckpt_dirname)
             # ================================================================
             
-
 
             # Prepared for Ray Sampling for all the images in the world space, which is also the target frame 0 recified space.
             for inputs in multi_inputs.values():
@@ -621,7 +618,6 @@ def main(args=None):
                         optimizer.zero_grad()     
                         world_outputs = utils.Dict.apply(models.detector()) #['boxes_3d', 'locations', 'dimensions', 'orientations', 'embeddings']               
 
-            
                         # Compute the Box Residual: If Using the Dynamic Modeling
                         if step>=my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
                             relative_index_list = [relative_index for relative_index in multi_inputs.keys()]
@@ -749,10 +745,8 @@ def main(args=None):
                                 boxes_2d=camera_boxes_2d)
 
 
-
                         # get the current target outputs
-                        target_outputs = multi_outputs[0]
-                                            
+                        target_outputs = multi_outputs[0]                                            
                         # ----------------------------------------------------------------
                         # bipartite_matching
                         matching_cost_matrices = [
@@ -768,7 +762,6 @@ def main(args=None):
                             utils.torch_function(sp.optimize.linear_sum_assignment),
                             matching_cost_matrices,
                         )) # (tensor([0, 1, 2, 3]), tensor([1, 0, 2, 3]))]  第一个数组表示 target_outputs 的索引。第二个数组表示 target_inputs 的索引。
-
 
                         # ----------------------------------------------------------------
                         # projection loss
@@ -1347,13 +1340,10 @@ def parse_args():
 
     # get the local rank
     args = parser.parse_args()
-
-
     return args
+
 
 if __name__=="__main__":
 
     args = parse_args()
-
-
     main(args=args)

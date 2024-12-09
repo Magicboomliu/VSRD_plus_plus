@@ -78,6 +78,7 @@ LINE_INDICES = [
 ]
 
 
+
 def encode_location(decoded_locations):
     # Sync into the Same Device 
     current_device = decoded_locations.device
@@ -110,31 +111,27 @@ def encode_orientation(rotation_matrices):
 
 
 def main(args=None):
-    
-    if args.config_path=='00':
-        from Optimized_Based.configs.train_config_sequence_00 import _C as my_conf_train
-    if args.config_path=='02':
-        from Optimized_Based.configs.train_config_sequence_02 import _C as my_conf_train
-    if args.config_path=='03':
-        from Optimized_Based.configs.train_config_sequence_03 import _C as my_conf_train
-    if args.config_path=='04':
-        from Optimized_Based.configs.train_config_sequence_04 import _C as my_conf_train
-    if args.config_path=='05':
-        from Optimized_Based.configs.train_config_sequence_05 import _C as my_conf_train
-    if args.config_path=='06':
-        from Optimized_Based.configs.train_config_sequence_06 import _C as my_conf_train
-    if args.config_path=='07':
-        from Optimized_Based.configs.train_config_sequence_07 import _C as my_conf_train
-    if args.config_path=='09':
-        from Optimized_Based.configs.train_config_sequence_09 import _C as my_conf_train
-    if args.config_path=='10':
-        from Optimized_Based.configs.train_config_sequence_10 import _C as my_conf_train
-    if args.config_path=='test':
-        from Optimized_Based.configs.train_config_ddp_debug import _C as my_conf_train
+    from Optimized_Based.configs.SPLITS64.train_config_sub_00 import _C as my_conf_train
+    N_SPLITS = 64
+    FIND_FLAG = False
+    for i in range(N_SPLITS):
+        suffix = f"{i:02}"
         
+        if suffix==args.config_path:
+            my_conf_train.TRAIN.DATASET.FILENAMES = [my_conf_train.TRAIN.DATASET.FILENAMES[0].replace("sub_0","sub_{}".format(i))]
+            assert os.path.exists(my_conf_train.TRAIN.DATASET.FILENAMES[0])
+            my_conf_train.TRAIN.DYNAMIC_LABELS_PATH = my_conf_train.TRAIN.DYNAMIC_LABELS_PATH.replace("sub_0","sub_{}".format(i))
+            assert os.path.exists(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)   
+            
+            print(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)
+            print(my_conf_train.TRAIN.DATASET.FILENAMES[0])
+                  
+            FIND_FLAG = True
+
+    assert FIND_FLAG == True
     
     
-    
+
     # DDP Settings
     # configuration
     if my_conf_train.TRAIN.DDP.LAUNCHER == "slurm":
@@ -218,7 +215,6 @@ def main(args=None):
                            BoxSizeFilter(min_box_size=source_transforms_min_box_size),
                            SoftRasterizer()]
 
-
     # ====================================================================================================
     # datasets
     datasets = KITTI360Dataset(filenames=train_filename_list,
@@ -244,7 +240,6 @@ def main(args=None):
 
     # Using Dynamic Masks Or Not
     USE_DYNAMIC_MODELING_FLAG = my_conf_train.TRAIN.USE_DYNAMIC_MODELING
-    
     USE_DYNAMIC_MASK_FLAG = my_conf_train.TRAIN.USE_DYNAMIC_MASK
     DYNAMIC_TYPE = my_conf_train.TRAIN.DYNAMIC_MODELING_TYPE
     USE_RDF_MODELING_FLAG = my_conf_train.TRAIN.USE_RDF_MODELING
@@ -289,10 +284,19 @@ def main(args=None):
                             break
             
             
-            # Output Locations
-            ckpt_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "ckpts/{}".format(my_conf_train.TRAIN.MODEL_TYPE)),image_dirname)
-            log_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "logs"),image_dirname)
-            out_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "outs"),image_dirname)
+            
+            os.makedirs(args.saved_ckpt_path,exist_ok=True)
+            ckpt_dirname_root = os.path.join(args.saved_ckpt_path,"ckpts")
+            log_dirname_root = os.path.join(args.saved_ckpt_path,"logs")
+            out_dirname_root = os.path.join(args.saved_ckpt_path,"outs")
+            
+            ckpt_dirname = os.path.join(ckpt_dirname_root,image_dirname)
+            log_dirname = os.path.join(log_dirname_root,image_dirname)
+            out_dirname = os.path.join(out_dirname_root,image_dirname)
+            
+            
+            
+        
             if os.path.exists(os.path.join(ckpt_dirname, f"step_{my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS - 1}.pt")):
                 logger.warning(f"[{image_filename}] Already optimized. Skip this sample.")
                 continue
@@ -378,11 +382,11 @@ def main(args=None):
         
             '''Data Alignment with Target Views'''
             for source_inputs in multi_inputs.values():
-                
                 source_instance_indices = [] 
 
                 for source_instance_ids, target_instance_ids in zip(source_inputs.instance_ids, target_inputs.instance_ids):
                     
+
                     indices = [
                         source_instance_ids.tolist().index(target_instance_id.item()) 
                         if target_instance_id in source_instance_ids else -1 
@@ -447,6 +451,7 @@ def main(args=None):
             if USE_DYNAMIC_MODELING_FLAG:
                 if USE_DYNAMIC_MASK_FLAG:
                     dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
+                
                     dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
             
 
@@ -458,6 +463,11 @@ def main(args=None):
             gt_orientation = multi_inputs[0]['est_orient'].float().contiguous().to(device_id)
             
             initial_loc_and_velo_validaity = multi_inputs[0]['LiDAR_Validality']
+            
+            if multi_inputs[0]['gt_loc'] is not None:
+                true_gt_loc = multi_inputs[0]['gt_loc'].float().contiguous().to(device_id)
+                if torch.max(torch.abs(true_gt_loc-gt_loc))>4:
+                    gt_loc = true_gt_loc
             
     
             
@@ -1190,6 +1200,7 @@ def main(args=None):
                             )
                             
                                 
+
                         if step >= my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
                             eikonal_loss = nn.functional.mse_loss(
                                 input=torch.norm(multi_sampled_gradients, dim=-1),
@@ -1200,6 +1211,7 @@ def main(args=None):
                         
                         
                         loss = sum(loss * loss_weight_list[name] for name, loss in losses.items())
+                        
                         meters.train.update(forward=stop_watch.restart())
                         torch.autograd.backward(loss)
                         meters.train.update(backward=stop_watch.restart())
@@ -1290,7 +1302,7 @@ def main(args=None):
                                 writer.add_scalar(f"scalars/{name}", metric, step)
 
                         if not (step + 1) % my_conf_train.TRAIN.LOGGING.CKPT_INTERVALS:
-                        
+                    
                             saver.save(
                                 filename=f"step_{step}.pt",
                                 step=step,
@@ -1320,11 +1332,19 @@ def parse_args():
         help="Path to pretrained model or model identifier from huggingface.co/models.")
 
     parser.add_argument(
+        "--saved_ckpt_path",
+        type=str,
+        default=None,
+        help="Path to pretrained model or model identifier from huggingface.co/models.")
+
+
+    parser.add_argument(
         "--device_id",
         type=int,
         default=None,
         required=True,
         help="Path to pretrained model or model identifier from huggingface.co/models.")
+
     # get the local rank
     args = parser.parse_args()
 
@@ -1334,4 +1354,6 @@ def parse_args():
 if __name__=="__main__":
 
     args = parse_args()
+
+
     main(args=args)

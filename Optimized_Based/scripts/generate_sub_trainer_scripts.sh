@@ -3,7 +3,7 @@
 # 初始端口和文件数量
 start_port=24500
 num_files=64  # 需要生成的脚本数量
-output_dir="./generated_scripts"
+output_dir="../generated_scripts"
 
 # 创建输出目录
 mkdir -p "$output_dir"
@@ -23,7 +23,7 @@ do
 #$ -l node_o=1
 #$ -l h_rt=24:00:00
 #$ -p -5
-#$ -N VSRD_TEST_SPLIT${formatted_i}
+#$ -N VSRD_${formatted_i}
 #$ -m ae
 #$ -M liuzihua1004@gmail.com
 
@@ -46,7 +46,7 @@ torchrun \\
     --nproc_per_node 1 \\
     train_split64.py --config_path \"${formatted_i}\" \\
     --device_id 0 \\
-    --saved_ckpt_path \"/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/output_models\""
+    --saved_ckpt_path \"/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/output_models_ablations\""
 
     # 保存脚本文件到指定目录
     echo "$script_content" > "$output_dir/run_script_${formatted_i}.sh"
