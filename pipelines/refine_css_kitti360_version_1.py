@@ -283,9 +283,42 @@ def create_kitti360_data_for_autolabels_sample(scale,
     
 def save_the_results_into_kitti3d_format(dict,save_name):
     
+    names_list = dict['name']
+    line_list = []
+    for idx, name in enumerate(names_list):
+        type_name = dict['name'][idx]
+        truncated = 0.0
+        occluded = 0.0
+        alpha = dict['alpha'].tolist()[idx]
+        box = dict['bbox'][idx].tolist()
+        box1 = box[0]
+        box2 = box[1]
+        box3 = box[2]
+        box4 = box[3]
+        dimensions = dict['dimensions'][idx].tolist()
+        dim1 = dimensions[0]
+        dim2 = dimensions[1]
+        dim3 = dimensions[2]
+        locations = dict['location'][idx].tolist()
+        loc1 = locations[0]
+        loc2 = locations[1]
+        loc3 = locations[2]
+        rotation_y = dict["rotation_y"].tolist()[idx]
+        score = dict['score'].tolist()[idx]
+        line = type_name + " " + str(truncated) + " " + str(occluded) + " "+ str(alpha) + " " + str(box1) + " " + str(box2) + " " +str(box3) + " "+ str(box4) + " " + str(dim1) + " " + str(dim2) + " "+ str(dim3) + " "+ str(loc1)+ " "+ str(loc2) + " " + str(loc3) + " "+ str(rotation_y)+" " + str(score)
+        line_list.append(line)
     
-    pass
+    
+    with open(save_name,'w') as f:
+        for idx, line in enumerate(line_list):
+            if idx!=len(line_list)-1:
+                f.writelines(line+"\n")
+            else:
+                f.writelines(line)
 
+
+def start_with_2013_(string):
+    return string[string.index("2013"):]
 
 
 def refine_css_kitti_360():
@@ -329,6 +362,15 @@ def refine_css_kitti_360():
         scale = 1.0
         idx = 1.0
         name = image_2_path[:-4]
+        
+        basename = os.path.basename(image_2_path).replace(".png",'.txt')
+        saved_folder_name = os.path.dirname(start_with_2013_(image_2_path))
+        saved_folder_name = os.path.join(path_autolabels,saved_folder_name)
+        os.makedirs(saved_folder_name,exist_ok=True)
+        
+        saved_filename = os.path.join(saved_folder_name,basename)
+    
+
         
         sparse_depth_path = image_2_path.replace("data_2d_raw","sparse_depth").replace("image_00","projected_lidar").replace(".png",".npy").replace("data_rect","data")
         sparse_depth_path = os.path.join(root_path,sparse_depth_path)
@@ -527,11 +569,9 @@ def refine_css_kitti_360():
             frame_estimations[key] = np.asarray(frame_estimations[key])
         
         
-        print(frame_annos)
-        print("--------------------------")
-        print(frame_estimations)
-        
-        quit()
+       
+        save_the_results_into_kitti3d_format(dict=frame_estimations,save_name=saved_filename)
+ 
         
     
 
