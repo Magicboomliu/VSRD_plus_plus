@@ -163,6 +163,11 @@ def refine_css(cfgp, subset_frames=None):
             pose_esimator_type = config.read_cfg_string(cfgp, 'optimization', 'pose_estimator', default='kabsch')
             scale = 2.0  # scale_dsdf.item() * 0.8
             pose_esimator = PoseEstimator(pose_esimator_type, scale)
+
+         
+
+
+
             init_pose = pose_esimator.estimate(
                 pcd_dsdf, nocs_dsdf, nocs_3d_pts, nocs_3d_cls, off_intrinsics, nocs_pred_resized
             )

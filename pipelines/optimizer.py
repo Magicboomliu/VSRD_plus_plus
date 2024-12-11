@@ -125,7 +125,7 @@ class Optimizer:
 
             # Compute nearest neighbors and threshold based on metric distance
             if (pcd_dsdf_trans.nelement() == 0) or (pcd_frustum.nelement() == 0):
-                print('Skip frame')
+                print('Skip frame for the reason of Computing nearest neighbors and threshold based on metric distance')
                 continue
 
             # 3D Loss
@@ -147,6 +147,10 @@ class Optimizer:
 
             # Check for nans
             if torch.isnan(loss).sum() > 0 or loss.sum() == 0:
+                if torch.isnan(loss).sum() > 0:
+                    print("There is NaN Value")
+                elif loss.sum()==0:
+                    print("loss is 0")
                 print('Skip frame')
                 continue
 

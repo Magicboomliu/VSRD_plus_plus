@@ -54,29 +54,10 @@ def refine_css_demo(cfgp):
     
 
     # Fetch frame and skip if no car annotations
-    sample = torch.load('data/optimization/kitti_sample.pt')
-
-    
-    # print(type(sample))
-    # print(sample.keys())
-    # print(sample['idx'])
-    # print(sample['scale'])
-    # print(sample['name'])
-    # print(sample['lidar'].shape) # sparse lidar in the world coordinate? [N,3]
-    # print(sample['image'].min()) # float32 from 0.0 to 1.0
-    # print(sample['orig_hw'])
-    # print(sample['orig_cam'].shape) # 3x3 camera K
-    # print(sample['gt'][0].keys()) #
-    # print(sample['depth'].min()) # H,W: sparse LiDAR
-    # print(sample['annos'].keys())
-    # print(sample['annos']['easy']) # only save the things that the ignore is not the Falase
-    # print("------------------------------")
-    # print(sample['gt'])
-    
+    sample = torch.load('/home/zliu/TPAMI25/AutoLabels/SDFlabel/data/KITTI360_Example/0000000251.pt')
+    #sample = torch.load("/home/zliu/TPAMI25/AutoLabels/SDFlabel/data/optimization/kitti_sample.pt")
 
 
-    # quit()
-    
 
     # Build container dicts to hold annotations and labels for later evaluation
     frame_annos, frame_estimations = defaultdict(list), defaultdict(list)
@@ -88,9 +69,8 @@ def refine_css_demo(cfgp):
 
     # Load MaskRCNN labels, skip frame if no labels found
     if label_type != 'gt':
-        maskrcnn_labels = torch.load('data/optimization/maskrcnn.lbl')
-
-
+        maskrcnn_labels = torch.load('/home/zliu/TPAMI25/AutoLabels/SDFlabel/data/KITTI360_Example/maskrcnn_0000000251.pt')
+        #maskrcnn_labels = torch.load('/home/zliu/TPAMI25/AutoLabels/SDFlabel/data/optimization/maskrcnn.lbl')
 
     
     # Loop through annotations
@@ -109,6 +89,7 @@ def refine_css_demo(cfgp):
             bbox_max_id = np.argmax(iou)
             bbox_maskrcnn = maskrcnn_labels['bboxes'][bbox_max_id].numpy()
             anno['bbox'] = bbox_maskrcnn.astype(np.int64)
+            
 
         # Get crops
         max_crop_area = config.read_cfg_int(cfgp, 'input', 'rendering_area', default=64) ** 2
@@ -231,7 +212,7 @@ def refine_css_demo(cfgp):
                                                    params['scale'].to(precision), params['trans'].to(precision),
                                                    params['yaw'].to(precision), sample['world_to_cam'], anno['bbox'])
         [frame_estimations[key].append(value) for key, value in label_kitti.items()]
-        # viztools.plot_3d_final(sample['lidar'], cam_T, scaled_points, anno, label_kitti)
+        viztools.plot_3d_final(sample['lidar'], cam_T, scaled_points, anno, label_kitti)
 
     # Transform all annotations and labels into needed format and save these frame results
     necessary_keys = ['alpha', 'bbox', 'dimensions', 'location', 'rotation_y', 'score']
@@ -240,5 +221,10 @@ def refine_css_demo(cfgp):
         frame_estimations[key] = np.asarray(frame_estimations[key])
 
     # Store autolabels for later evaluation
+    
+    print(frame_annos)
+    print("---------------------")
+    print(frame_estimations)
+
     pickle.dump([frame_annos, frame_estimations], open(os.path.join(path_autolabels, str("demo") + '.pkl'), 'wb'))
     print("Done")

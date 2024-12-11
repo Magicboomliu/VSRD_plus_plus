@@ -3,6 +3,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import pickle
+import torch
 
 
 def load_pickle(file_path):
@@ -28,12 +29,28 @@ def load_pickle(file_path):
 
 if __name__=="__main__":
     
-    file_path = "/home/zliu/TPAMI25/AutoLabels/sdflabel/test_labels/demo.pkl"
+    # file_path = "/home/zliu/TPAMI25/AutoLabels/sdflabel/test_labels/demo.pkl"
+    # data = load_pickle(file_path)
+    # print(data[1])
     
+    kitti_sample = torch.load("/home/zliu/TPAMI25/AutoLabels/SDFlabel/data/optimization/kitti_sample.pt")
     
-    data = load_pickle(file_path)
+    print(kitti_sample['lidar'].max())
+    print(kitti_sample['lidar'].min())
+    
+    print(kitti_sample.keys())
+    
+    print(kitti_sample['world_to_cam'])
+    print(kitti_sample['orig_cam'])
+    
+    print(kitti_sample['depth'].max())
+    
     
 
-    print(data[1])
-    
-    pass
+    a = torch.zeros(4,4)
+    a[:3,:3] = torch.eye(3)
+    a[3,3]=1
+    a[0,3] = 5.97421356e-02
+    a[1,3] = -3.57286467e-04
+    a[2,3] = 2.74096891e-03
+    print(a)

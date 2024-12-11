@@ -24,6 +24,7 @@ class PoseEstimator:
         Returns: Pose dictionary
 
         """
+
         if self.type == 'kabsch':
             init_pose = self.init_pose_3d(
                 pcd_dsdf, nocs_dsdf, pcd_scene, nocs_scene, type='kabsch', scale_model=self.scale

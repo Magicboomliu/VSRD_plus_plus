@@ -625,6 +625,8 @@ def get_kitti_frame(sample):
     """
     H, W, _ = sample['image'].shape
 
+
+    
     # Filter out lidar points outside field of view
     scene_lidar = sample['lidar']
     frustum = build_view_frustum(sample['orig_cam'], 0, 0, W, H)
