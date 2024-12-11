@@ -376,9 +376,12 @@ def reproject(color, depth, K, flip_color_channels=False, filter=False):
     if isinstance(depth, torch.Tensor):
         depth_ = depth.squeeze()
         
-        if depth_.dim() != 2:
-            print(f"Warning: Input depth_ must be a 2D tensor, but got shape {depth_.shape}. Proceeding with adjustment.")
-            depth_ = depth_.unsqueeze(0) if depth_.dim() == 1 else depth_.unsqueeze(1)
+        if depth_.dim() == 1:
+            print(f"Warning: Input depth_ is 1D. Adjusting shape by adding a dimension.")
+            depth_ = depth_.unsqueeze(1)
+        elif depth_.dim() == 0:
+            print("Warning: Input depth_ is a scalar. Converting to a 2D tensor.")
+            depth_ = depth_.unsqueeze(0).unsqueeze(1)
         
         y, x = torch.nonzero(depth_).split(1, dim=1)
         
@@ -388,6 +391,12 @@ def reproject(color, depth, K, flip_color_channels=False, filter=False):
         points = point3D * depth_[y, x]
         # Check for the special (render) case where the channels go first
         if color.shape[0] == 3:
+            y_max = color.shape[1]
+            x_max = color.shape[2]
+
+            y = torch.clamp(y,min=0,max=y_max-1)
+            x = torch.clamp(x,min=0,max=x_max-1)
+
             colors = color[:, y, x].squeeze().t()
         else:
             colors = color[y, x].squeeze()
@@ -408,11 +417,19 @@ def reproject(color, depth, K, flip_color_channels=False, filter=False):
         colors = colors.unsqueeze(0)
 
     if filter:
+        colors = torch.nan_to_num(colors, nan=0.0, posinf=0.0, neginf=0.0)
+        colors_cpu = colors.clone().detach().cpu()
         # Select non-black (foreground) NOCS points
-        active = (colors > 0).sum(dim=1) > 0
         
-        active = active.to(points.device)
-        
+        active = (colors_cpu> 0).sum(dim=1) > 0
+        assert not torch.isnan(active).any(), "Active contains NaN"
+        assert not torch.isinf(active).any(), "Active contains Inf"
+        assert (active >= 0).all(), "Active contains negative values"
+
+        device = torch.device("cpu")
+        active = active.to(device)
+        points = points.to(device)
+                
         points = points[active]
         colors = colors[active]
 

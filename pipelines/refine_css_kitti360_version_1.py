@@ -24,7 +24,6 @@ import cv2
 
 from tqdm import tqdm
 
-from configs.config_refine_kitti_360 import _C as config
 
 # Define seed for reproducibility
 seed = 1
@@ -321,8 +320,7 @@ def start_with_2013_(string):
     return string[string.index("2013"):]
 
 
-def refine_css_kitti_360():
-    
+def refine_css_kitti_360(config):
     
     # Set device and precision
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -354,6 +352,7 @@ def refine_css_kitti_360():
     root_path = config.INPUT.KITTI_PATH
     # filename
     filename_list = config.INPUT.FILENAME
+    
     awaited_preprocessed_contents = read_text_lines(filename_list)
 
     for line in tqdm(awaited_preprocessed_contents):
@@ -369,6 +368,9 @@ def refine_css_kitti_360():
         os.makedirs(saved_folder_name,exist_ok=True)
         
         saved_filename = os.path.join(saved_folder_name,basename)
+        
+        if os.path.exists(saved_filename):
+            continue
     
 
         
@@ -574,18 +576,4 @@ def refine_css_kitti_360():
  
         
     
-
-
-if __name__=="__main__":
-    pass
-    
-    
-    
-    
-    
-    # awaited_preprocessed_filenames = "/home/zliu/TPAMI25/AutoLabels/SDFlabel/data_preprocssing/all_filenames.txt"
-    # awaited_preprocessed_contents = read_text_lines(awaited_preprocessed_filenames)
-    
-    # for line in tqdm(awaited_preprocessed_contents):
-    #     print(line)
     
