@@ -375,7 +375,13 @@ def reproject(color, depth, K, flip_color_channels=False, filter=False):
     """
     if isinstance(depth, torch.Tensor):
         depth_ = depth.squeeze()
+        
+        if depth_.dim() != 2:
+            print(f"Warning: Input depth_ must be a 2D tensor, but got shape {depth_.shape}. Proceeding with adjustment.")
+            depth_ = depth_.unsqueeze(0) if depth_.dim() == 1 else depth_.unsqueeze(1)
+        
         y, x = torch.nonzero(depth_).split(1, dim=1)
+        
         good_xy = torch.cat((x, y), dim=1).float()
         homo_points = torch.cat([good_xy, good_xy.new_ones(len(good_xy), 1)], dim=1)
         point3D = (torch.inverse(K).to(homo_points.device) @ homo_points.t()).t()

@@ -94,6 +94,10 @@ def refine_css_demo(cfgp):
         # Get crops
         max_crop_area = config.read_cfg_int(cfgp, 'input', 'rendering_area', default=64) ** 2
         
+        print("max crop area:")
+        print(max_crop_area)
+        print("-----------------")
+        
 
         # Get detected crop
         l, t, r, b = anno['bbox']
@@ -127,6 +131,8 @@ def refine_css_demo(cfgp):
 
         # DeepSDF Inference and surface point/normal extraction.
         grid_density = config.read_cfg_int(cfgp, 'input', 'grid_density', default=30)
+        print("grid density: ", grid_density)
+        
         grid = Grid3D(grid_density, device, precision)
 
         inputs = torch.cat([latent_pred.expand(grid.points.size(0), -1), grid.points],
@@ -143,6 +149,8 @@ def refine_css_demo(cfgp):
 
         # Estimating initial pose
         pose_esimator_type = config.read_cfg_string(cfgp, 'optimization', 'pose_estimator', default='kabsch')
+        print("pose_estimatio_type:",pose_esimator_type)
+        
         scale = 2.0
         pose_esimator = PoseEstimator(pose_esimator_type, scale)
         init_pose = pose_esimator.estimate(
@@ -180,6 +188,8 @@ def refine_css_demo(cfgp):
         weights = {}
         weights['2d'] = config.read_cfg_float(cfgp, 'losses', '2d_weight', default=1)
         weights['3d'] = config.read_cfg_float(cfgp, 'losses', '3d_weight', default=1)
+        print("weight 3d:",weights['3d'])
+        print("weight 2d:",weights['2d'])
 
         # Refine the initial estimate
         optimizer = Optimizer(params, device, weights)
@@ -192,9 +202,15 @@ def refine_css_demo(cfgp):
 
         # Set visualization type
         viz_type = config.read_cfg_string(cfgp, 'visualization', 'viz_type', default=None)
-
+        print("vis_type: ",viz_type)
+        
         # Optimize the initial pose estimate
         iters_optim = config.read_cfg_int(cfgp, 'optimization', 'iters', default=100)
+        
+        print("iters_optim:",iters_optim)
+        
+
+        
         optimizer.optimize(
             iters_optim,
             nocs_pred,

@@ -22,6 +22,10 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import cv2
 
+from tqdm import tqdm
+
+from configs.config_refine_kitti_360 import _C as config
+
 # Define seed for reproducibility
 seed = 1
 np.random.seed(seed)
@@ -277,9 +281,271 @@ def create_kitti360_data_for_autolabels_sample(scale,
     return data_sample_dict,maskrcnn_dict
     
     
+def save_the_results_into_kitti3d_format(dict,save_name):
+    
+    
+    pass
 
 
+
+def refine_css_kitti_360():
+    
+    
+    # Set device and precision
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    precision = config.OPTIMIZATION.PRECISION
+    if precision=="float16":
+        precision = torch.float16
+
+
+    # Setup CSS
+    css_path = config.INPUT.CSS_PATH
+    css_net = setup_css(pretrained=True, model_path=css_path).to(device)
+    
+
+    # Setup DeepSDF
+    dsdf_path = config.INPUT.DEEPSDF_PATH
+    dsdf, latent_size = dsdf_ws.setup_dsdf(dsdf_path, precision=precision)
+    dsdf = dsdf.to(device)
+
+    # Define label type (GT, MaskRCNN)
+    label_type = config.INPUT.LABEL_TYPE
+    
+
+    # Path for output autolabels
+    path_autolabels = config.LABELS.PATH
+    os.makedirs(path_autolabels, exist_ok=True)
+
+
+    # ROOT PATH
+    root_path = config.INPUT.KITTI_PATH
+    # filename
+    filename_list = config.INPUT.FILENAME
+    awaited_preprocessed_contents = read_text_lines(filename_list)
+
+    for line in tqdm(awaited_preprocessed_contents):
+        splits = line.split()
+        image_2_path = splits[0]
+        scale = 1.0
+        idx = 1.0
+        name = image_2_path[:-4]
+        
+        sparse_depth_path = image_2_path.replace("data_2d_raw","sparse_depth").replace("image_00","projected_lidar").replace(".png",".npy").replace("data_rect","data")
+        sparse_depth_path = os.path.join(root_path,sparse_depth_path)
+        image_2_path_abs = os.path.join(root_path,image_2_path)
+        annotations_file_path = image_2_path.replace("data_2d_raw","annotations").replace(".png",".json")
+        annotations_file_path = os.path.join(root_path,annotations_file_path)
+        cam_calib_path = os.path.join(root_path,"cam_calib.txt")
+        
+        synced_image_2_path = splits[1]
+        synced_label_gt_path = synced_image_2_path.replace("image_2","label_gt").replace(".png",'.txt')
+        
+        
+        assert os.path.exists(sparse_depth_path)
+        assert os.path.exists(image_2_path_abs)
+        assert os.path.exists(annotations_file_path)
+        assert os.path.exists(synced_image_2_path)
+        assert os.path.exists(cam_calib_path)
+        assert os.path.exists(synced_label_gt_path)
+
+        kitti360_sample_data_dict,maskrnn_dict = create_kitti360_data_for_autolabels_sample(scale=scale,
+                                                idx=idx,
+                                                name=name,
+                                                lidar_path=sparse_depth_path,
+                                                annotations_file_path=annotations_file_path,
+                                                cam_calib_path=cam_calib_path,
+                                                sync_gt_label_path=synced_label_gt_path,
+                                                sync_image_path=synced_image_2_path)
+        
+        
+        sample = kitti360_sample_data_dict
+
+        # Build container dicts to hold annotations and labels for later evaluation
+        frame_annos, frame_estimations = defaultdict(list), defaultdict(list)
+
+        # Select annotations based on difficulty
+        diff_annos = config.INPUT.DIFF_ANNOS
+        annos = rtools.get_annos(diff_annos, sample)
+
+        # Load MaskRCNN labels, skip frame if no labels found
+        if label_type != 'gt':
+            maskrcnn_labels = maskrnn_dict
+
+        
+        # Loop through annotations
+        for anno_idx, anno in enumerate(annos):
+            
+            # Store this annotation for later evaluation
+            [frame_annos[key].append(value) for key, value in anno.items()]
+
+            # If maskrcnn labels are available
+            if label_type != 'gt':
+                # Find closest maskrcnn bbox by iou
+                iou = []
+                for id, bbox in enumerate(maskrcnn_labels['bboxes'].numpy()):
+                    iou.append(rtools.get_iou(bbox, anno['bbox']))
+
+                bbox_max_id = np.argmax(iou)
+                bbox_maskrcnn = maskrcnn_labels['bboxes'][bbox_max_id].numpy()
+                anno['bbox'] = bbox_maskrcnn.astype(np.int64)
+                
+
+            # Get crops
+            #max_crop_area = config.read_cfg_int(cfgp, 'input', 'rendering_area', default=64) ** 2
+            max_crop_area = 1024
+
+            # Get detected crop
+            l, t, r, b = anno['bbox']
+            crop_bgr = sample['image'][t:b, l:r].copy() # get image batch
+            crop_dep = sample['depth'][t:b, l:r].copy() # get the depth patch
+
+            # Adjust intrinsics based on crop position and size
+            K = sample['orig_cam']  # camera intrinsics
+            crop_size = torch.Tensor(crop_bgr.shape[:-1])
+            crop_size, intrinsics, off_intrinsics = rtools.adjust_intrinsics_crop(
+                K, crop_size, anno['bbox'], max_crop_area
+            )  # 裁剪后的相机内参矩阵, 考虑偏移量的内参矩阵，用于点云重投影。
+            
+            # (N,3)
+            pcd_crop, pcd_crop_rgb = rtools.reproject(crop_bgr, crop_dep, off_intrinsics, filter=False) # 生成裁剪区域的点云
+
+
+            # Use masks from maskrcnn
+            if label_type == 'maskrcnn':
+                mask = maskrcnn_labels['masks'][bbox_max_id]
+                crop_bgr *= mask.unsqueeze(-1).float().expand_as(torch.tensor(crop_bgr)).numpy()
+
+            # Preprocess image patch for pytorch digestion
+            crop_rgb, crop_rgb_vis = rtools.transform_bgr_crop(crop_bgr, orig=True)
+            crop_rgb = crop_rgb.unsqueeze(0).to(device).float()
+
+            # Get css output
+            pred_css = css_net(crop_rgb)
+            nocs_pred = pred_css['uvw_sm_masked'].detach().squeeze() / 255.
+            latent_pred = pred_css['latent'][0].detach().to(precision)
+
+            # DeepSDF Inference and surface point/normal extraction.
+            #grid_density = config.read_cfg_int(cfgp, 'input', 'grid_density', default=30)
+            grid_density = 40
+            grid = Grid3D(grid_density, device, precision)
+
+            inputs = torch.cat([latent_pred.expand(grid.points.size(0), -1), grid.points],
+                            1).to(latent_pred.device, latent_pred.dtype)
+            pred_sdf_grid, inv_scale = dsdf(inputs)
+            pcd_dsdf, nocs_dsdf, normals_dsdf = grid.get_surface_points(pred_sdf_grid)
+
+            # Reproject NOCS into the scene
+            nocs_pred_resized = F.interpolate(nocs_pred.unsqueeze(0), size=crop_dep.shape[:2],
+                                            mode='nearest').squeeze(0)
+            nocs_3d_pts, nocs_3d_cls = rtools.reproject(
+                nocs_pred_resized, torch.Tensor(crop_dep).unsqueeze(0), off_intrinsics, filter=True
+            )
+
+            # Estimating initial pose
+            #pose_esimator_type = config.read_cfg_string(cfgp, 'optimization', 'pose_estimator', default='kabsch')
+            pose_esimator_type = 'kabsch'
+            scale = 2.0
+            pose_esimator = PoseEstimator(pose_esimator_type, scale)
+            init_pose = pose_esimator.estimate(
+                pcd_dsdf, nocs_dsdf, nocs_3d_pts, nocs_3d_cls, off_intrinsics, nocs_pred_resized
+            )
+
+            if init_pose is None:
+                print('NO RANSAC POSE FOUND!!!')
+                continue
+            scale, rot, tra = init_pose['scale'], init_pose['rot'], init_pose['tra']
+
+            # Constrain rotation to azimuth only. We need to flip X from the car system
+            rot[:, 1] = [0, 1, 0]
+            rot[1, :] = [0, 1, 0]
+            yaw = rtools.roty_in_bev(rot @ np.diag([-1, 1, 1])) + math.pi / 2  # KITTI roty starts at canonical pi/2
+
+            # Estimate good height by looking up lowest Y value of reprojected NOCS
+            world_points = ((rot @ (pcd_dsdf.detach().cpu().numpy() * scale).T).T + tra)
+            proj_world = rtools.project(sample['orig_cam'], world_points)
+            L, T = proj_world[:, 0].min(), proj_world[:, 1].min()
+            R, B = proj_world[:, 0].max(), proj_world[:, 1].max()
+            iou = rtools.compute_iou([l, t, r, b], [L, T, R, B])
+            if iou < 0.7:
+                print('Restimating height')
+                ymin, ymax = world_points[:, 1].min(), world_points[:, 1].max()
+                tra[1] = nocs_3d_pts[:, 1].min() + (ymax - ymin) / 2
+
+            # Optimizer and params
+            params = {}
+            params['yaw'] = np.array([yaw])
+            params['trans'] = init_pose['tra'] / init_pose['scale']
+            params['scale'] = np.array([init_pose['scale']])
+            params['latent'] = latent_pred.detach().cpu().numpy()
+
+            weights = {}
+            # weights['2d'] = config.read_cfg_float(cfgp, 'losses', '2d_weight', default=1)
+            # weights['3d'] = config.read_cfg_float(cfgp, 'losses', '3d_weight', default=1)
+            weights['2d'] = 0.3
+            weights['3d'] = 0.5
+
+            # Refine the initial estimate
+            optimizer = Optimizer(params, device, weights)
+
+            # For additional visualization
+            frame_vis = {}
+            frame_vis['image'] = sample['image']
+            frame_vis['bbox'] = anno['bbox']
+            frame_vis['crop_size'] = crop_bgr.shape[:-1]
+
+            # Set visualization type
+            #viz_type = config.read_cfg_string(cfgp, 'visualization', 'viz_type', default=None)
+            viz_type = '3d'
+            viz_type = None
+
+            # Optimize the initial pose estimate
+            #iters_optim = config.read_cfg_int(cfgp, 'optimization', 'iters', default=100)
+            iters_optim = 60
+            optimizer.optimize(
+                iters_optim,
+                nocs_pred,
+                pcd_crop,
+                dsdf,
+                grid,
+                intrinsics.detach().to(device, precision),
+                crop_size,
+                frame_vis=frame_vis,
+                viz_type=viz_type
+            )
+
+            # Now collect the results from the optimization
+            label_kitti, scaled_points, cam_T = rtools.get_kitti_label(dsdf, grid, params['latent'].to(precision),
+                                                    params['scale'].to(precision), params['trans'].to(precision),
+                                                    params['yaw'].to(precision), sample['world_to_cam'], anno['bbox'])
+            [frame_estimations[key].append(value) for key, value in label_kitti.items()]
+            # viztools.plot_3d_final(sample['lidar'], cam_T, scaled_points, anno, label_kitti)
+
+        # Transform all annotations and labels into needed format and save these frame results
+        necessary_keys = ['alpha', 'bbox', 'dimensions', 'location', 'rotation_y', 'score']
+        for key in necessary_keys:
+            frame_annos[key] = np.asarray(frame_annos[key])
+            frame_estimations[key] = np.asarray(frame_estimations[key])
+        
+        
+        print(frame_annos)
+        print("--------------------------")
+        print(frame_estimations)
+        
+        quit()
+        
+    
 
 
 if __name__=="__main__":
     pass
+    
+    
+    
+    
+    
+    # awaited_preprocessed_filenames = "/home/zliu/TPAMI25/AutoLabels/SDFlabel/data_preprocssing/all_filenames.txt"
+    # awaited_preprocessed_contents = read_text_lines(awaited_preprocessed_filenames)
+    
+    # for line in tqdm(awaited_preprocessed_contents):
+    #     print(line)
+    
