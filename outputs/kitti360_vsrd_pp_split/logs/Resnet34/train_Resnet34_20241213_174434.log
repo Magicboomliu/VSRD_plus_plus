@@ -1,0 +1,93 @@
+2024-12-13 17:44:34 | INFO   | utils.log:init_logger - config: 
+CHECKPOINTS_DIR: ./outputs/kitti360_vsrd_pp_split/checkpoints
+DATA:
+  CLS_LIST: ['Car']
+  DIM_PRIOR: [[1.6, 1.8, 4.0]]
+  IMAGENET_STATS_MEAN: [0.485, 0.456, 0.406]
+  IMAGENET_STATS_STD: [0.229, 0.224, 0.225]
+  KITTI_360_PATH: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/training/
+  MODE: KITTI360
+  ROOT_3D_PATH: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/training/
+  RoI_POINTS_DIR: ROI_LiDAR_InternImage
+  TYPE: ['Car']
+EXP_NAME: Resnet34
+INFER:
+  DET_2D_PATH: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/training/det2d/
+  SAVE_DIR: ./outputs/kitti360_vsrd_pp_split/predictions
+  WORKS: 0
+LOG_DIR: ./outputs/kitti360_vsrd_pp_split/logs
+NET_LAYER: 34
+RESTORE_EPOCH: None
+RESTORE_PATH: None
+TRAIN:
+  BATCH_SIZE: 8
+  EPOCH: 50
+  FLIP: 0.0
+  IMAGE_HW: (376, 1408)
+  LR: 0.0001
+  SAMPLE_LOSS_POINTS: 100
+  SAMPLE_ROI_POINTS: 100
+  TRAIN_FILE: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/ImageSets_For_WeakM3D/train.txt
+  WEIGHT_FILE: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/ImageSets_For_WeakM3D/train_weight.txt
+  WORKS: 4
+VAL:
+  GT_DIR: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/training/label_gt/
+  SPLIT_FILE: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/ImageSets_For_WeakM3D/val.txt
+  WORKS: 0
+2024-12-13 17:44:35 | INFO   | __main__:train - Start training
+2024-12-13 17:44:42 | INFO   | __main__:train - current loss is 3.1547679901123047, iterations is 5
+2024-12-13 17:44:43 | INFO   | __main__:train - current loss is 2.1878273487091064, iterations is 10
+2024-12-13 17:44:44 | INFO   | __main__:train - current loss is 1.9561567306518555, iterations is 15
+2024-12-13 17:44:44 | INFO   | __main__:train - current loss is 1.3504685163497925, iterations is 20
+2024-12-13 17:44:45 | INFO   | __main__:train - current loss is 0.3716399669647217, iterations is 25
+2024-12-13 17:44:46 | INFO   | __main__:train - current loss is 1.1070610284805298, iterations is 30
+2024-12-13 17:44:47 | INFO   | __main__:train - current loss is 1.5519416332244873, iterations is 35
+2024-12-13 17:44:47 | INFO   | __main__:train - current loss is 0.8422598838806152, iterations is 40
+2024-12-13 17:44:48 | INFO   | __main__:train - current loss is 0.2769746780395508, iterations is 45
+2024-12-13 17:44:49 | INFO   | __main__:train - current loss is 0.6062881350517273, iterations is 50
+2024-12-13 17:44:50 | INFO   | __main__:train - current loss is 0.6799252033233643, iterations is 55
+2024-12-13 17:44:51 | INFO   | __main__:train - current loss is 0.592355489730835, iterations is 60
+2024-12-13 17:44:51 | INFO   | __main__:train - current loss is 0.3256836533546448, iterations is 65
+2024-12-13 17:44:52 | INFO   | __main__:train - current loss is -0.11290466785430908, iterations is 70
+2024-12-13 17:44:53 | INFO   | __main__:train - current loss is 1.9302735328674316, iterations is 75
+2024-12-13 17:44:54 | INFO   | __main__:train - current loss is 0.774584949016571, iterations is 80
+2024-12-13 17:44:54 | INFO   | __main__:train - current loss is 0.868808925151825, iterations is 85
+2024-12-13 17:44:55 | INFO   | __main__:train - current loss is 0.31430521607398987, iterations is 90
+2024-12-13 17:44:56 | INFO   | __main__:train - current loss is 1.368145227432251, iterations is 95
+2024-12-13 17:44:57 | INFO   | __main__:train - current loss is 0.18021629750728607, iterations is 100
+2024-12-13 17:44:57 | INFO   | __main__:train - Epoch_idx: 0, global_step: 100, loss: 1.0865, max: 50 epochs
+2024-12-13 17:44:57 | INFO   | __main__:train - current loss is 0.9078536033630371, iterations is 105
+2024-12-13 17:44:58 | INFO   | __main__:train - current loss is 0.40922337770462036, iterations is 110
+2024-12-13 17:44:59 | INFO   | __main__:train - current loss is 0.7141139507293701, iterations is 115
+2024-12-13 17:45:00 | INFO   | __main__:train - current loss is 0.7349561452865601, iterations is 120
+2024-12-13 17:45:00 | INFO   | __main__:train - current loss is 0.3074527382850647, iterations is 125
+2024-12-13 17:45:01 | INFO   | __main__:train - current loss is 0.2897377610206604, iterations is 130
+2024-12-13 17:45:02 | INFO   | __main__:train - current loss is 0.5892924070358276, iterations is 135
+2024-12-13 17:45:03 | INFO   | __main__:train - current loss is -0.31191423535346985, iterations is 140
+2024-12-13 17:45:04 | INFO   | __main__:train - current loss is 0.5619034767150879, iterations is 145
+2024-12-13 17:45:04 | INFO   | __main__:train - current loss is 1.1654208898544312, iterations is 150
+2024-12-13 17:45:05 | INFO   | __main__:train - current loss is 0.6915731430053711, iterations is 155
+2024-12-13 17:45:06 | INFO   | __main__:train - current loss is 0.5171858072280884, iterations is 160
+2024-12-13 17:45:07 | INFO   | __main__:train - current loss is 0.8788965940475464, iterations is 165
+2024-12-13 17:45:07 | INFO   | __main__:train - current loss is 1.0281951427459717, iterations is 170
+2024-12-13 17:45:08 | INFO   | __main__:train - current loss is 0.48364946246147156, iterations is 175
+2024-12-13 17:45:09 | INFO   | __main__:train - current loss is 0.3329455256462097, iterations is 180
+2024-12-13 17:45:10 | INFO   | __main__:train - current loss is 2.090707778930664, iterations is 185
+2024-12-13 17:45:11 | INFO   | __main__:train - current loss is -0.17970499396324158, iterations is 190
+2024-12-13 17:45:11 | INFO   | __main__:train - current loss is -0.3151419758796692, iterations is 195
+2024-12-13 17:45:12 | INFO   | __main__:train - current loss is 0.3649429678916931, iterations is 200
+2024-12-13 17:45:12 | INFO   | __main__:train - Epoch_idx: 0, global_step: 200, loss: 0.4914, max: 50 epochs
+2024-12-13 17:45:13 | INFO   | __main__:train - current loss is 0.46083182096481323, iterations is 205
+2024-12-13 17:45:14 | INFO   | __main__:train - current loss is -0.007190093398094177, iterations is 210
+2024-12-13 17:45:14 | INFO   | __main__:train - current loss is 1.099144458770752, iterations is 215
+2024-12-13 17:45:15 | INFO   | __main__:train - current loss is 0.8262342214584351, iterations is 220
+2024-12-13 17:45:16 | INFO   | __main__:train - current loss is 0.2628451883792877, iterations is 225
+2024-12-13 17:45:17 | INFO   | __main__:train - current loss is 0.16299718618392944, iterations is 230
+2024-12-13 17:45:18 | INFO   | __main__:train - current loss is 0.3869011104106903, iterations is 235
+2024-12-13 17:45:18 | INFO   | __main__:train - current loss is 0.4925690293312073, iterations is 240
+2024-12-13 17:45:19 | INFO   | __main__:train - current loss is 0.015885114669799805, iterations is 245
+2024-12-13 17:45:20 | INFO   | __main__:train - current loss is 1.0426220893859863, iterations is 250
+2024-12-13 17:45:21 | INFO   | __main__:train - current loss is 0.32615283131599426, iterations is 255
+2024-12-13 17:45:21 | INFO   | __main__:train - current loss is 0.9356634020805359, iterations is 260
+2024-12-13 17:45:22 | INFO   | __main__:train - current loss is 0.47878897190093994, iterations is 265
+2024-12-13 17:45:23 | INFO   | __main__:train - current loss is 0.18244849145412445, iterations is 270

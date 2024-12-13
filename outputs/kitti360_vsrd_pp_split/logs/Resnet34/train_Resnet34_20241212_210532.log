@@ -1,0 +1,36 @@
+2024-12-12 21:05:32 | INFO   | utils.log:init_logger - config: 
+CHECKPOINTS_DIR: ./outputs/kitti360_vsrd_pp_split/checkpoints
+DATA:
+  CLS_LIST: ['Car']
+  DIM_PRIOR: [[1.6, 1.8, 4.0]]
+  IMAGENET_STATS_MEAN: [0.485, 0.456, 0.406]
+  IMAGENET_STATS_STD: [0.229, 0.224, 0.225]
+  KITTI_360_PATH: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/training/
+  MODE: KITTI360
+  ROOT_3D_PATH: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/training/
+  RoI_POINTS_DIR: ROI_LiDAR_InternImage
+  TYPE: ['Car']
+EXP_NAME: Resnet34
+INFER:
+  DET_2D_PATH: /private/pengliang/KITTI3D/training/rgb_detections/val/
+  SAVE_DIR: ./outputs/kitti360_vsrd_pp_split/predictions
+  WORKS: 16
+LOG_DIR: ./outputs/kitti360_vsrd_pp_split/logs
+NET_LAYER: 34
+RESTORE_EPOCH: None
+RESTORE_PATH: None
+TRAIN:
+  BATCH_SIZE: 8
+  EPOCH: 50
+  FLIP: 0.0
+  IMAGE_HW: (376, 1408)
+  LR: 0.0001
+  SAMPLE_LOSS_POINTS: 100
+  SAMPLE_ROI_POINTS: 100
+  TRAIN_FILE: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/ImageSets_For_WeakM3D/train.txt
+  WEIGHT_FILE: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/ImageSets_For_WeakM3D/train_weight.txt
+  WORKS: 4
+VAL:
+  GT_DIR: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/training/label_gt/
+  SPLIT_FILE: /media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/ImageSets_For_WeakM3D/val.txt
+  WORKS: 16

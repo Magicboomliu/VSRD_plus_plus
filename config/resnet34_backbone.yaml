@@ -1,0 +1,11 @@
+EXP_NAME : "Resnet34"
+NET_LAYER : 34
+
+TRAIN:
+    BATCH_SIZE: 8
+    WORKS: 4
+    SAMPLE_ROI_POINTS: 100
+
+    TRAIN_FILE: '/media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/ImageSets_For_WeakM3D/train.txt'
+    WEIGHT_FILE: '/media/zliu/data12/dataset/TPAMI_Stage2/OLD_VSRD24_LABEL/VSRD_PP_SPLIT/ImageSets_For_WeakM3D/train_weight.txt'
+
