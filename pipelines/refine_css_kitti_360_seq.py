@@ -253,8 +253,3 @@ def refine_css_kitti_360(config):
         
 
         save_the_results_into_kitti3d_format(frame_estimations,save_name=saved_pd_labels)
-
-    
-    
-
-    
