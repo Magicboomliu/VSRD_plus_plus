@@ -11,6 +11,41 @@ if precision == torch.float16:
 else:
     eps = 1e-8
 
+def is_anno_easy_kitti360(anno):
+    """
+    Check if the difficulty of the KITTI annotation is "easy"
+    Args:
+        anno: KITTI annotation
+
+    Returns: bool if "easy"
+
+    """
+    height = anno['bbox'][3] - anno['bbox'][1]
+    if height>=40:
+        return True
+    else:
+        return False
+
+
+def is_anno_hard_kitti360(anno):
+    """
+    Check if the difficulty of the KITTI annotation is "hard"
+    Args:
+        anno: KITTI annotation
+
+    Returns: bool if "hard"
+
+    """
+
+    height = anno['bbox'][3] - anno['bbox'][1]
+    if height<40 and height>=25:
+        return True
+    else:
+        return False
+
+
+
+
 
 def is_anno_easy(anno):
     """
@@ -55,6 +90,9 @@ def is_anno_hard(anno):
     if (anno['occluded'] > 2) or (anno['truncated'] > 0.5) or height < 25:
         return False
     return True
+
+
+
 
 
 def transform_bgr_crop(crop_bgr, orig=False):
@@ -607,6 +645,26 @@ def get_annos(diff_annos, sample):
         annos = sample['annos']['easy'] + sample['annos']['medium']
     else:
         annos = sample['annos']['easy']
+    annos = sorted(annos, key=lambda i: i['location'][2])  # Sort annos based on ascending depth
+    return annos
+
+def get_annos_kitti360s(diff_annos, sample):
+    """
+    Get annotations based on their difficulty
+    
+    Args:
+        diff_annos: Annotation's difficulty 
+        sample: Sample object
+
+    Returns:
+
+    """
+    if diff_annos == 'hard':
+        annos = sample['annos']['easy'] +sample['annos']['hard']
+    elif diff_annos =='easy':
+        annos = sample['annos']['easy']
+    else:
+        raise NotImplementedError
     annos = sorted(annos, key=lambda i: i['location'][2])  # Sort annos based on ascending depth
     return annos
 

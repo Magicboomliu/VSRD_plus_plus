@@ -161,6 +161,11 @@ def compute_bounding_boxes_float(instances):
     return bounding_boxes
 
 
+
+
+
+
+
 def create_kitti360_data_for_autolabels_sample(scale,
                                                idx,
                                                name,
@@ -181,26 +186,27 @@ def create_kitti360_data_for_autolabels_sample(scale,
     data_sample_dict['image'] = image
     data_sample_dict['orig_hw'] = image.shape
     
-    K = np.array([float(data) for data in read_text_lines(cam_calib_path)[2].split()[1:]]).reshape(3,4)[:3,:3]
-    data_sample_dict['orig_cam'] = K
+    K_old = np.array([float(data) for data in read_text_lines(cam_calib_path)[2].split()[1:]]).reshape(3,4)
+    K = K_old[:3,:3]
+    
+    
+    
     
     annotation_contents = read_annotation(annotations_file_path)
-    world_to_cam = annotation_contents['extrinsic_matrix'].cpu().numpy()
+    world_to_cam = annotation_contents['extrinsic_matrix']
 
-    # default settings of the 
-    a = torch.zeros(4,4)
-    a[:3,:3] = torch.eye(3)
-    a[3,3]=1
-    a[0,3] = 5.97421356e-02
-    a[1,3] = -3.57286467e-04
-    a[2,3] = 2.74096891e-03
+    cam, R, t = cv2.decomposeProjectionMatrix(K_old)[:3]
+    world_to_cam = np.eye(4)
+    world_to_cam[:3, :3] = R
+    world_to_cam[:3, 3] = -t[:3, 0]
     
-    world_to_cam = a    
     data_sample_dict['world_to_cam'] = world_to_cam
     
+    data_sample_dict['orig_cam'] = cam
 
+    lidar = depth_to_pointcloud(depth=projected_depth,K=K,extrinsic=world_to_cam) + 8
     
-    lidar = depth_to_pointcloud(depth=projected_depth,K=K,extrinsic=world_to_cam)
+    
     data_sample_dict['lidar'] = lidar
     data_sample_dict['depth'] = projected_depth 
     
@@ -261,6 +267,107 @@ def create_kitti360_data_for_autolabels_sample(scale,
     
     
 
+def create_kitti360_data_for_autolabels_sample_V2(scale,
+                                               idx,
+                                               name,
+                                               lidar_path,
+                                               annotations_file_path,
+                                               cam_calib_path,
+                                               sync_gt_label_path,
+                                               sync_image_path):
+    
+    data_sample_dict = dict()
+    data_sample_dict['idx'] = idx
+    data_sample_dict['scale'] = scale
+    data_sample_dict['name'] = name
+    projected_depth = np.load(lidar_path)
+
+    # image = np.array(Image.open(sync_image_path).convert("RGB"))/255.
+    image = cv2.imread(sync_image_path)/255.
+    data_sample_dict['image'] = image
+    data_sample_dict['orig_hw'] = image.shape
+    
+    K_old = np.array([float(data) for data in read_text_lines(cam_calib_path)[2].split()[1:]]).reshape(3,4)
+    K = K_old[:3,:3]
+    
+    
+    
+    
+    annotation_contents = read_annotation(annotations_file_path)
+    world_to_cam = annotation_contents['extrinsic_matrix']
+
+    cam, R, t = cv2.decomposeProjectionMatrix(K_old)[:3]
+    world_to_cam = np.eye(4)
+    world_to_cam[:3, :3] = R
+    world_to_cam[:3, 3] = -t[:3, 0]
+    
+    data_sample_dict['world_to_cam'] = world_to_cam
+    
+    data_sample_dict['orig_cam'] = cam
+
+    lidar = depth_to_pointcloud(depth=projected_depth,K=K,extrinsic=world_to_cam) + 8
+    
+    
+    data_sample_dict['lidar'] = lidar
+    data_sample_dict['depth'] = projected_depth 
+    
+    
+    gt_annotations = np.loadtxt(sync_gt_label_path,dtype=str).reshape(-1,17)
+    
+    gt_dict_list = []
+    annos = dict()
+    annos['easy'] = []
+    annos['medium'] = []
+    annos['hard'] = []
+    
+    for idx, line in enumerate(gt_annotations):
+        gt_dict = dict()
+        gt_dict['name'] = line[0]
+        gt_dict['bbox'] = [float(a) for a in line[4:8].tolist()]
+        gt_dict['location'] =[float(a) for a in line[11:14].tolist()]
+        gt_dict['dimensions'] =[float(a) for a in line[8:11].tolist()]
+        gt_dict['rotation_y'] = float(line[14])
+        gt_dict['score'] = float(line[15])
+        gt_dict['truncated'] = 0.0
+        gt_dict['occluded'] = 0
+        gt_dict['ignore'] = False
+        gt_dict['alpha'] = float(line[3])
+        gt_dict_list.append(gt_dict)
+    
+    data_sample_dict['gt'] = gt_dict_list
+    annos['easy'] = gt_dict_list
+    data_sample_dict['annos'] = annos   
+    
+    
+    maskrcnn_dict = dict()
+    
+    bboxes = compute_bounding_boxes_float(annotation_contents['masks'])
+    
+    mask_list = []
+    for idx, sample in enumerate(bboxes):
+        
+        height_length = bboxes[idx][3] - bboxes[idx][1]
+        width_length = bboxes[idx][2] - bboxes[idx][0]
+        
+        if height_length ==0:
+            bboxes[idx][3] = bboxes[idx][3] + 1
+            
+        if width_length ==0:
+            bboxes[idx][2] = bboxes[idx][2] + 1
+        
+        mask = annotation_contents['masks'][idx] #[H,W]
+        mask = mask[int(bboxes[idx][1]):int(bboxes[idx][3]),int(bboxes[idx][0]):int(bboxes[idx][2])]
+        mask_list.append(mask)
+    
+    
+    maskrcnn_dict['bboxes'] = bboxes
+    maskrcnn_dict['masks'] = mask_list
+        
+    
+    return data_sample_dict,maskrcnn_dict
+
+
+
 
 
 
@@ -287,7 +394,16 @@ if __name__=="__main__":
     assert os.path.exists(synced_image_2_path)
     assert os.path.exists(synced_label_gt_path)
     
-    kitti360_sample_data_dict,maskrnn_dict = create_kitti360_data_for_autolabels_sample(scale=scale,
+    # kitti360_sample_data_dict,maskrnn_dict = create_kitti360_data_for_autolabels_sample(scale=scale,
+    #                                            idx=idx,
+    #                                            name=name,
+    #                                            lidar_path=lidar_path,
+    #                                            annotations_file_path=annotations_file_path,
+    #                                            cam_calib_path=cam_calib_path,
+    #                                            sync_gt_label_path=synced_label_gt_path,
+    #                                            sync_image_path=synced_image_2_path)
+
+    kitti360_sample_data_dict,maskrnn_dict = create_kitti360_data_for_autolabels_sample_V2(scale=scale,
                                                idx=idx,
                                                name=name,
                                                lidar_path=lidar_path,
@@ -297,21 +413,13 @@ if __name__=="__main__":
                                                sync_image_path=synced_image_2_path)
 
 
-    # maskrcnn_labels = maskrnn_dict
-    # for idx, mask in enumerate(maskrcnn_labels['masks']):
-        
-    #     height = maskrcnn_labels['bboxes'][idx][3] - maskrcnn_labels['bboxes'][idx][1]
-    #     width = maskrcnn_labels['bboxes'][idx][2] - maskrcnn_labels['bboxes'][idx][0]
-        
-    #     height = torch.round(height)
-    #     width = torch.round(width)
         
 
-    save_to_pt_file(file_path="/home/zliu/TPAMI25/AutoLabels/SDFlabel/data/KITTI360_Example/0000000251.pt",
-                    data_dict=kitti360_sample_data_dict)
+    # save_to_pt_file(file_path="/home/zliu/TPAMI25/AutoLabels/SDFlabel/data/KITTI360_Example/0000000251.pt",
+    #                 data_dict=kitti360_sample_data_dict)
 
-    save_to_pt_file(file_path="/home/zliu/TPAMI25/AutoLabels/SDFlabel/data/KITTI360_Example/maskrcnn_0000000251.pt",
-                    data_dict=maskrnn_dict)
+    # save_to_pt_file(file_path="/home/zliu/TPAMI25/AutoLabels/SDFlabel/data/KITTI360_Example/maskrcnn_0000000251.pt",
+    #                 data_dict=maskrnn_dict)
     
     
     

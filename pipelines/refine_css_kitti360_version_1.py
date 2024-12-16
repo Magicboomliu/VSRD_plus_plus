@@ -207,15 +207,20 @@ def create_kitti360_data_for_autolabels_sample(scale,
     annotation_contents = read_annotation(annotations_file_path)
     world_to_cam = annotation_contents['extrinsic_matrix'].cpu().numpy()
 
-    # default settings of the 
-    a = torch.zeros(4,4)
-    a[:3,:3] = torch.eye(3)
-    a[3,3]=1
-    a[0,3] = 5.97421356e-02
-    a[1,3] = -3.57286467e-04
-    a[2,3] = 2.74096891e-03
+    # # default settings of the 
+    # a = torch.zeros(4,4)
+    # a[:3,:3] = torch.eye(3)
+    # a[3,3]=1
+    # # a[0,3] = 5.97421356e-02
+    # # a[1,3] = -3.57286467e-04
+    # # a[2,3] = 2.74096891e-03
+    # a[0,3] =world_to_cam[0,3]
+    # a[1,3] = world_to_cam[1,3]
+    # a[2,3] = world_to_cam[2,3]
     
-    world_to_cam = a    
+    
+    
+    # world_to_cam = a    
     data_sample_dict['world_to_cam'] = world_to_cam
     
 

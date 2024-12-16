@@ -93,10 +93,7 @@ def refine_css_demo(cfgp):
 
         # Get crops
         max_crop_area = config.read_cfg_int(cfgp, 'input', 'rendering_area', default=64) ** 2
-        
-        print("max crop area:")
-        print(max_crop_area)
-        print("-----------------")
+
         
 
         # Get detected crop
