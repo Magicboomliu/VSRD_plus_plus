@@ -17,6 +17,8 @@ from lib.datasets.kitti.kitti_eval_python.eval import get_distance_eval_result
 import lib.datasets.kitti.kitti_eval_python.kitti_common as kitti
 import copy
 from .pd import PhotometricDistort
+import random
+
 
 
 class KITTI_Dataset(data.Dataset):
@@ -299,6 +301,18 @@ class KITTI_Dataset(data.Dataset):
             heading_angle = calib.ry2alpha(objects[i].ry, (objects[i].box2d[0] + objects[i].box2d[2]) / 2)
             if heading_angle > np.pi:  heading_angle -= 2 * np.pi  # check range
             if heading_angle < -np.pi: heading_angle += 2 * np.pi
+            
+            
+            debug_angle = heading_angle % (2 * np.pi)
+            if not (debug_angle >= 0 and debug_angle <= 2 * np.pi):
+
+                random_numbers = [a for a in range(len(self.idx_list)-1)]
+                # Select one random number from the generated numbers
+                selected_number = random.choice(random_numbers)
+               
+                return __getitem__(selected_number)
+     
+            
             heading_bin[i], heading_res[i] = angle2class(heading_angle)
 
             # encoding size_3d
