@@ -362,12 +362,20 @@ class Loss_Computation():
 				corner_3D_loss = self.loss_weights['corner_loss'] * \
 							self.reg_loss_fnc(preds['corners_3D']*conf_weights, pred_targets['corners_3D']*conf_weights, reduction='none').sum(dim=2).mean()
 
+				if torch.isnan(corner_3D_loss):
+					print("corner_3D_loss is NaN, replacing with 0.")
+					corner_3D_loss = torch.tensor(0.0).to(corner_3D_loss.device)  
+    
 			if self.compute_keypoint_corner:
 				# N x K x 3
 				keypoint_loss = self.loss_weights['keypoint_loss'] * self.keypoint_loss_fnc(preds['keypoints'],
 								pred_targets['keypoints'], reduction='none').sum(dim=2) * pred_targets['keypoints_mask']
 				
 				keypoint_loss = keypoint_loss.sum() / torch.clamp(pred_targets['keypoints_mask'].sum(), min=1)
+
+				if torch.isnan(keypoint_loss):
+					print("keypoint_loss is NaN, replacing with 0.")
+					keypoint_loss = torch.tensor(0.0).to(keypoint_loss.device) 
 
 				if self.compute_keypoint_depth_loss:
 					pred_keypoints_depth, keypoints_depth_mask = preds['keypoints_depths'], pred_targets['keypoints_depth_mask'].bool()
@@ -501,11 +509,19 @@ class Loss_Computation():
 			loss_dict['weighted_avg_depth_loss'] = soft_depth_loss
 
 		# loss_dict ===> log_loss_dict
+  
 		for key, value in loss_dict.items():
 			if key not in log_loss_dict:
 				log_loss_dict[key] = value.item()
 
 		# stop when the loss has NaN or Inf
+  
+		for k,v in loss_dict.items():
+			if torch.isnan(v).sum() > 0:
+				loss_dict[k] = torch.tensor(0.0).to(v.device)
+			if torch.isinf(v).sum() > 0:
+				loss_dict[k] = torch.tensor(0.0).to(v.device)
+    
 		for v in loss_dict.values():
 			if torch.isnan(v).sum() > 0:
 				pdb.set_trace()

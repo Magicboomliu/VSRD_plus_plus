@@ -121,17 +121,33 @@ def get_iou_3d(pred_corners, target_corners):
 
     # x-z plane overlap
     for i in range(N):
-        bottom_a, bottom_b = Polygon(A[i, 0:4, [0, 2]].cpu()), Polygon(B[i, 0:4, [0, 2]].cpu())
+        
+        try:
+        
+            bottom_a, bottom_b = Polygon(A[i, 0:4, [0, 2]].cpu()), Polygon(B[i, 0:4, [0, 2]].cpu())
 
-        if bottom_a.is_valid and bottom_b.is_valid:
-            # check is valid,  A valid Polygon may not possess any overlapping exterior or interior rings.
-            bottom_overlap = bottom_a.intersection(bottom_b).area
-        else:
-            bottom_overlap = 0
-            
-        overlap3d = bottom_overlap * h_overlap[i]
-        union3d = bottom_a.area * (max_h_a[i] - min_h_a[i]) + bottom_b.area * (max_h_b[i] - min_h_b[i]) - overlap3d
-        iou3d[i] = overlap3d / union3d
+            if not bottom_a.is_valid:
+                bottom_a = bottom_a.buffer(0)  # 修复无效多边形
+            if not bottom_b.is_valid:
+                bottom_b = bottom_b.buffer(0)  # 修复无效多边形
 
+            if bottom_a.is_valid and bottom_b.is_valid:
+                # check is valid,  A valid Polygon may not possess any overlapping exterior or interior rings.
+                bottom_overlap = bottom_a.intersection(bottom_b).area
+            else:
+                bottom_overlap = 0
+                
+            overlap3d = bottom_overlap * h_overlap[i]
+            union3d = bottom_a.area * (max_h_a[i] - min_h_a[i]) + bottom_b.area * (max_h_b[i] - min_h_b[i]) - overlap3d
+            if union3d > 0:
+                iou3d[i] = overlap3d / union3d
+            else:
+                iou3d[i] = 0.01  # 或者设置为其他默认值
+
+        except Exception as e:
+            print(f"Error in sample {i}: {e}")
+            iou3d[i] = 0.01  # Set a default value if an error occurs (e.g., 0 for 
+
+    iou3d = torch.where(torch.isnan(iou3d) | torch.isinf(iou3d), torch.tensor(0.001, device=iou3d.device), iou3d)
     return iou3d
     

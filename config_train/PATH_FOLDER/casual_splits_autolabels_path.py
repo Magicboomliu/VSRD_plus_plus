@@ -1,7 +1,7 @@
 import os
 
 class DatasetCatalog():
-    DATA_DIR = "/data3/PAMI_Datasets/VSRD_SPLIT/"
+    DATA_DIR = "/data1/KITTI360/Replaced_With_GT_Boxes/Autolabels/Casual_Splits_2025/"
     DATASETS = {
         "kitti_train": {
             "root": "training/",

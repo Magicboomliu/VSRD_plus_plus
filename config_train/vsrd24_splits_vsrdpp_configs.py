@@ -331,11 +331,11 @@ _C.TEST.VISUALIZE_THRESHOLD = 0.4
 # Misc options
 # ---------------------------------------------------------------------------- #
 # Directory where output files are written
-_C.OUTPUT_DIR = "./tools/logs/vsrd_pp"
+_C.OUTPUT_DIR = "/data1/KITTI360/Z_Outputs_Models/VSRD24_Splits/VSRDPP"
 
 _C.SEED = -1
 _C.CUDNN_BENCHMARK = True
 _C.START_TIME = 0
 
-_C.PATHS_CATALOG = os.path.join(os.path.dirname(__file__), "paths_catalog_static_dyanmic.py")
+_C.PATHS_CATALOG = os.path.join(os.path.dirname(__file__), "PATH_FOLDER/vsrd24_splits_vsrdpp_path.py")
 _C.CODE_PATH=None

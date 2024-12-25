@@ -24,6 +24,7 @@ from data.augmentations import get_composed_augmentations
 from .kitti_utils import Calibration, read_label, approx_proj_center, refresh_attributes, show_heatmap, show_image_with_boxes, show_edge_heatmap
 
 from config import TYPE_ID_CONVERSION
+import random
 
 class KITTIDataset(Dataset):
 	def __init__(self, cfg, root, is_train=True, transforms=None, augment=True):
@@ -269,7 +270,17 @@ class KITTIDataset(Dataset):
 
 		original_idx = self.image_files[idx][:6]
 		objs = self.filtrate_objects(objs) # remove objects of irrelevant classes
-		 
+		
+		occlusions_maps_all = [obj.occlusion for obj in objs]
+		if len(occlusions_maps_all)<1 or occlusions_maps_all[0]==None:
+			nums_list = [a for a in range(self.num_samples)]
+			re_sample_index = random.choice(nums_list)
+			self.__getitem__(re_sample_index)
+		else:
+			pass
+			
+	
+
 		# random horizontal flip
 		if self.augmentation is not None:
 			img, objs, calib = self.augmentation(img, objs, calib)
@@ -284,6 +295,7 @@ class KITTIDataset(Dataset):
 		# the boundaries of the image after padding
 		x_min, y_min = int(np.ceil(pad_size[0] / self.down_ratio)), int(np.ceil(pad_size[1] / self.down_ratio))
 		x_max, y_max = (pad_size[0] + img_w - 1) // self.down_ratio, (pad_size[1] + img_h - 1) // self.down_ratio
+
 
 		if self.enable_edge_fusion:
 			# generate edge_indices for the edge fusion module
@@ -454,9 +466,9 @@ class KITTIDataset(Dataset):
 
 			# target_center: the point to represent the object in the downsampled feature map
 			if self.heatmap_center == '2D':
-				target_center = bbox_center.round().astype(np.int)
+				target_center = bbox_center.round().astype(np.int32)
 			else:
-				target_center = target_proj_center.round().astype(np.int)
+				target_center = target_proj_center.round().astype(np.int32)
 
 			# clip to the boundary
 			target_center[0] = np.clip(target_center[0], x_min, x_max)

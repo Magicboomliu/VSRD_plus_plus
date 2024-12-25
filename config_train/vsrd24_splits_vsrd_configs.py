@@ -277,7 +277,7 @@ _C.SOLVER.WARMUP_STEPS = -1
 _C.SOLVER.GRAD_NORM_CLIP = -1
 
 _C.SOLVER.SAVE_CHECKPOINT_INTERVAL = 1000
-_C.SOLVER.EVAL_INTERVAL = 2000
+_C.SOLVER.EVAL_INTERVAL = 2000 #2000
 _C.SOLVER.SAVE_CHECKPOINT_EPOCH_INTERVAL = 1
 _C.SOLVER.EVAL_EPOCH_INTERVAL = 1
 
@@ -331,10 +331,10 @@ _C.TEST.VISUALIZE_THRESHOLD = 0.4
 # Misc options
 # ---------------------------------------------------------------------------- #
 # Directory where output files are written
-_C.OUTPUT_DIR = "./tools/logs/vsrd"
+_C.OUTPUT_DIR = "/data1/KITTI360/Z_Outputs_Models/VSRD24_Splits/VSRD"
 
 _C.SEED = -1
 _C.CUDNN_BENCHMARK = True
 _C.START_TIME = 0
 
-_C.PATHS_CATALOG = os.path.join(os.path.dirname(__file__), "paths_catalog_static_dyanmic.py")
+_C.PATHS_CATALOG = os.path.join(os.path.dirname(__file__), "PATH_FOLDER/vsrd24_splits_vsrd_path.py")

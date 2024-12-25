@@ -11,8 +11,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(ROOT_DIR)
 
-from config_train import cfg_vsrd
-from config_train import cfg_vsrd_pp
+# vsrd splits
+from config_train import cfg_vsrd_24_splits_vsrd 
+from config_train import cfg_vsrd_24_splits_vsrd_pp
+from config_train import cfg_vsrd_24_splits_autolabels
+
+# casual splits
+from config_train import cfg_casual_splits_vsrd
+from config_train import cfg_casual_splits_vsrd_pp
+from config_train import cfg_casual_splits_autolabels
+
 
 from data import make_data_loader
 from solver import build_optimizer, build_scheduler
@@ -93,11 +101,23 @@ def train(cfg, model, device, distributed,code_path):
 
 def setup(args):
     
-    if args.split_type=='vsrd':
-        cfg = cfg_vsrd
-    elif args.split_type=='vsrd_pp':
-        cfg = cfg_vsrd_pp
+
+    if args.split_type=='vsrd24_splits_vsrd':
+        cfg = cfg_vsrd_24_splits_vsrd 
+    elif args.split_type=='vsrd24_splits_vsrdpp':
+        cfg = cfg_vsrd_24_splits_vsrd_pp
+    elif args.split_type=='vsrd24_splits_autolabels':
+        cfg = cfg_vsrd_24_splits_autolabels
     
+    elif args.split_type=='casual_splits_vsrd':
+        cfg = cfg_casual_splits_vsrd
+    elif args.split_type=='casual_splits_vsrdpp':
+        cfg = cfg_casual_splits_vsrd_pp
+    elif args.split_type=='casual_splits_autolabels':
+        cfg = cfg_casual_splits_autolabels
+        
+    else:
+        raise NotImplementedError
     
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
@@ -160,6 +180,9 @@ def main(args):
             find_unused_parameters=True,
         )
     model.train()
+    
+
+    
     train(cfg, model, device, distributed,code_path=args.code_path)
 
 if __name__ == '__main__':
