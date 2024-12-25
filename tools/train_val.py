@@ -103,6 +103,7 @@ def main():
     logger.info('Batch Size: %d' % (cfg['dataset']['batch_size']))
     logger.info('Split: %s' % (cfg['dataset']['test_split']))
 
+
     tester.test()
 
 

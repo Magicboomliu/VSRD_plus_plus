@@ -9,7 +9,10 @@ from skimage import io
 
 
 def get_image_index_str(img_idx):
-    return "{:06d}".format(img_idx)
+    if isinstance(img_idx,str):
+        return img_idx
+    else:
+        return "{:06d}".format(img_idx)
 
 
 def get_kitti_info_path(idx,
@@ -311,7 +314,7 @@ def get_label_anno(label_path):
     content = [line.strip().split(' ') for line in lines]
     annotations['name'] = np.array([x[0] for x in content])
     annotations['truncated'] = np.array([float(x[1]) for x in content])
-    annotations['occluded'] = np.array([int(x[2]) for x in content])
+    annotations['occluded'] = np.array([int(float(x[2])) for x in content])
     annotations['alpha'] = np.array([float(x[3]) for x in content])
     annotations['bbox'] = np.array(
         [[float(info) for info in x[4:8]] for x in content]).reshape(-1, 4)

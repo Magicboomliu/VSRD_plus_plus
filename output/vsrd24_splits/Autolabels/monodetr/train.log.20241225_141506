@@ -1,0 +1,6 @@
+2024-12-25 14:15:07,691   INFO  ==> Loading from checkpoint '/home/zliu/TPAMI25/Mono3Ds/MonoDETR/output/vsrd24_splits/Autolabels/monodetr/checkpoint.pth'
+2024-12-25 14:15:07,925   INFO  ==> Done
+2024-12-25 14:15:28,362   INFO  ==> Saving ...
+2024-12-25 14:15:28,408   INFO  ==> Loading detections and GTs...
+2024-12-25 14:15:28,446   INFO  1088
+2024-12-25 14:15:28,447   INFO  1087

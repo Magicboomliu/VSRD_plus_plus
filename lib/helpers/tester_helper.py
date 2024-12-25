@@ -32,6 +32,11 @@ class Tester(object):
                 checkpoint_path = os.path.join(self.output_dir, "checkpoint_epoch_{}.pth".format(self.cfg['checkpoint']))
             else:
                 checkpoint_path = os.path.join(self.output_dir, "checkpoint_best.pth")
+
+            #FIXME
+            checkpoint_path = "/home/zliu/TPAMI25/Mono3Ds/MonoDETR/output/vsrd24_splits/Autolabels/monodetr/checkpoint.pth"
+
+
             assert os.path.exists(checkpoint_path)
             load_checkpoint(model=self.model,
                             optimizer=None,

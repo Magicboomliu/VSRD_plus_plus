@@ -19,6 +19,14 @@ import copy
 from .pd import PhotometricDistort
 import random
 
+def check_existence(folder,ids,logger):
+    my_folder = [str(a[:-4]) for a in os.listdir(folder)]
+    return_ids = []
+    for my_id in ids:
+        if my_id in my_folder:
+            
+            return_ids.append(my_id)
+    return return_ids
 
 
 class KITTI_Dataset(data.Dataset):
@@ -107,9 +115,17 @@ class KITTI_Dataset(data.Dataset):
     def eval(self, results_dir, logger):
         logger.info("==> Loading detections and GTs...")
         img_ids = [int(id) for id in self.idx_list]
+        
         dt_annos = kitti.get_label_annos(results_dir)
-        gt_annos = kitti.get_label_annos(self.label_dir, img_ids)
+        if len(dt_annos)!=len(self.idx_list):
+            new_ids_list = check_existence(results_dir,self.idx_list,logger)
+        else:
+            new_ids_list = self.idx_list
+            
+        gt_annos = kitti.get_label_annos(self.label_dir, new_ids_list)
 
+
+        
         test_id = {'Car': 0, 'Pedestrian':1, 'Cyclist': 2}
 
         logger.info('==> Evaluating (official) ...')
@@ -310,7 +326,7 @@ class KITTI_Dataset(data.Dataset):
                 # Select one random number from the generated numbers
                 selected_number = random.choice(random_numbers)
                
-                return __getitem__(selected_number)
+                return self.__getitem__(selected_number)
      
             
             heading_bin[i], heading_res[i] = angle2class(heading_angle)

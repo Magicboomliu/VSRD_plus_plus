@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=3 python tools/train_val.py --config $@
+CUDA_VISIBLE_DEVICES=2 python tools/train_val.py --config $@
