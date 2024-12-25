@@ -48,7 +48,15 @@ torch.backends.cudnn.enabled = True # enable cudnn and uncertainty imported
 # torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = True # enable cudnn to search the best algorithm
 
-def train(cfg, model, device, distributed,code_path):
+def train(cfg, model, device, distributed,code_path,ckpts):
+    
+    if ckpts is not None:
+        optimizer_pretrained = ckpts['optimizer']
+        scheduler_pretrained = ckpts['scheduler']
+        iteration_pretrained = ckpts['iteration']
+    
+
+    
     data_loader = make_data_loader(cfg, is_train=True)
     data_loaders_val = build_test_loader(cfg, is_train=False)
 
@@ -84,6 +92,12 @@ def train(cfg, model, device, distributed,code_path):
         extra_checkpoint_data = checkpointer.load(cfg.MODEL.WEIGHT, use_latest=False)
         arguments.update(extra_checkpoint_data)
 
+    if ckpts is not None:
+
+        optimizer.load_state_dict(optimizer_pretrained)  
+        scheduler.load_state_dict(scheduler_pretrained)
+        arguments["iteration"] = iteration_pretrained
+    
     do_train(
         cfg,
         distributed,
@@ -153,7 +167,7 @@ def main(args):
     model.to(device)
     
     if args.pretrained_model_path =='none':
-        pass
+        ckpts = Nones
     else:
         # load the pretrained model here
         ckpts = torch.load(args.pretrained_model_path)
@@ -183,7 +197,7 @@ def main(args):
     
 
     
-    train(cfg, model, device, distributed,code_path=args.code_path)
+    train(cfg, model, device, distributed,code_path=args.code_path,ckpts=ckpts)
 
 if __name__ == '__main__':
     args = default_argument_parser().parse_args()

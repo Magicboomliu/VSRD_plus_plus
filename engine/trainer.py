@@ -79,6 +79,8 @@ def do_train(
 	meters = MetricLogger(delimiter=" ", )
 	max_iter = cfg.SOLVER.MAX_ITERATION
 	start_iter = arguments["iteration"]
+	
+
 
 	# enable warmup
 	if cfg.SOLVER.LR_WARMUP:
