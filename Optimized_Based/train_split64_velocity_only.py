@@ -63,6 +63,7 @@ from vsrd.distributed.loader import DistributedDataLoader
 # Initialization
 from preprocessing.Initial_Attributes.Get_Initial_Attributes import Get_Initial_Attributes
 import argparse
+import random
 
 
 import pickle
@@ -111,7 +112,8 @@ def encode_orientation(rotation_matrices):
 
 
 def main(args=None):
-    from Optimized_Based.configs.SPLITS64.train_config_sub_00 import _C as my_conf_train
+    from Optimized_Based.configs.SPLITS64.train_config_sub_00_velocity_only import _C as my_conf_train
+    
     N_SPLITS = 64
     FIND_FLAG = False
     for i in range(N_SPLITS):
@@ -454,9 +456,32 @@ def main(args=None):
                     dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
 
             # without using the location and the velocity
-            initial_loc_and_velo_validaity = False
+            # initial_loc_and_velo_validaity = False
+            multi_inputs = Get_Initial_Attributes(multi_inputs=multi_inputs,dynamic_mask_list=dynamic_mask_for_target_view,
+                                                  device=device_id)
+            gt_loc = multi_inputs[0]['est_loc'].float().contiguous().to(device_id)
+            gt_velocity = multi_inputs[0]['velo'].float().contiguous().to(device_id)
+            gt_orientation = multi_inputs[0]['est_orient'].float().contiguous().to(device_id)
+
+            initial_loc_and_velo_validaity = multi_inputs[0]['LiDAR_Validality']
+            if dynamic_mask_for_target_view is not None:
+                if len(dynamic_mask_for_target_view)>0:
+                    if sum(dynamic_mask_for_target_view)>0:
+                        initial_loc_and_velo_validaity = multi_inputs[0]['LiDAR_Validality']
+                    else:
+                        initial_loc_and_velo_validaity = False
+                else:
+                    initial_loc_and_velo_validaity = False
+            else:
+                initial_loc_and_velo_validaity = False
+                    
+                        
+
+            if random.random()>0.5:
+                initial_loc_and_velo_validaity = False
             
 
+                        
             multi_inputs = Get_Initial_Attributes(multi_inputs=multi_inputs,dynamic_mask_list=dynamic_mask_for_target_view,
                                                   device=device_id)
             gt_loc = multi_inputs[0]['est_loc'].float().contiguous().to(device_id)
@@ -467,7 +492,7 @@ def main(args=None):
             
             if multi_inputs[0]['gt_loc'] is not None:
                 true_gt_loc = multi_inputs[0]['gt_loc'].float().contiguous().to(device_id)
-                if torch.max(torch.abs(true_gt_loc-gt_loc))>4:
+                if torch.max(torch.abs(true_gt_loc-gt_loc))>3:
                     gt_loc = true_gt_loc
             
     
@@ -476,18 +501,8 @@ def main(args=None):
                 
                 if initial_loc_and_velo_validaity:
                     gt_loc_for_initial = encode_location(gt_loc)                
-                    gt_orientation_for_initial = encode_orientation(gt_orientation)
-                    models['detector'].velocity = torch.nn.Parameter(gt_velocity)
                     models['detector'].locations = torch.nn.Parameter(gt_loc_for_initial)
                     
-                    # initialization for dynamic objcetrs
-                    for idx, dynamic_mask in enumerate(dynamic_mask_for_target_view):
-                        if dynamic_mask:
-                            if models['detector'].orientations.shape[1]==gt_orientation_for_initial.shape[1]:
-                                try:
-                                    models['detector'].orientations[:,idx,:] = torch.nn.Parameter(gt_orientation_for_initial)[:,idx,:]
-                                except:
-                                    pass
                 else:
                     pass
     
@@ -672,10 +687,9 @@ def main(args=None):
                                 
 
                                 # Is This a BUG?
-                                
                                 if initial_loc_and_velo_validaity:
-                                    location_loss = F.l1_loss(re_order_loc,world_outputs.locations.squeeze(0)) # BUG1
-                                    velocity_loss = F.l1_loss(re_order_velo,models['detector'].velocity.squeeze(0))
+                                    location_loss = F.l1_loss(re_order_loc,world_outputs.locations.squeeze(0))* 0.1 # BUG1
+                                    velocity_loss = F.l1_loss(re_order_velo,models['detector'].velocity.squeeze(0)) * 0.0
                                 else:
                                     location_loss = F.l1_loss(re_order_loc,world_outputs.locations.squeeze(0)) * 0.0 # BUG1
                                     velocity_loss = F.l1_loss(re_order_velo,models['detector'].velocity.squeeze(0)) * 0.0
@@ -999,10 +1013,10 @@ def main(args=None):
                                 if USE_DYNAMIC_MODELING_FLAG:
                                     boxes_residuals = relative_box_residual
                                 else:
-                                    boxes_residuals = torch.zeros(1,8,nums_of_source_images_integrated_into_rendering,3).to(device)
+                                    boxes_residuals = torch.zeros(1,nums_of_instance_number,nums_of_source_images_integrated_into_rendering,3).to(device)
                             # learn the residual   
                             else:
-                                boxes_residuals = torch.zeros(1,8,nums_of_source_images_integrated_into_rendering,3).to(device)
+                                boxes_residuals = torch.zeros(1,nums_of_instance_number,nums_of_source_images_integrated_into_rendering,3).to(device)
                            
                                 
             
@@ -1095,6 +1109,9 @@ def main(args=None):
                             sampled_rays_nums_current = sample_rays_nums_per_instance[frame_index]
                             current_stacked_max_values = stacked_max_values[:,frame_index,:,:]
                             current_flatten_max_values = current_stacked_max_values.flatten(1,-1)
+                            current_flatten_max_values = current_flatten_max_values.clamp(min=1e-8)
+                            if current_flatten_max_values.sum() == 0:
+                                current_flatten_max_values = current_flatten_max_values + 1e-4
                             current_multi_ray_indices = torch.multinomial(
                                 input=current_flatten_max_values,
                                 num_samples=sampled_rays_nums_current,

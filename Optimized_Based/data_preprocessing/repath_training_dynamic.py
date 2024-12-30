@@ -21,7 +21,6 @@ def save_into_txt(content_list,saved_name):
 if __name__=="__main__":
     
     training_all_files_path = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames_ablation/train_all_filenames.txt"
-    
     dynamic_all_files_path = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames_ablation/train_all_dynamic_mask.txt"
     
     train_all_files_data = read_text_lines(training_all_files_path)

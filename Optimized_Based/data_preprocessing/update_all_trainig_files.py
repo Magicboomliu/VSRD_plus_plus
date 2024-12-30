@@ -16,14 +16,12 @@ def read_text_lines(filepath):
 
 if __name__=="__main__":
 
-    training_filenames_path = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames/train_all_filenames.txt"
-    dynamic_filenames_path = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames/train_all_dyanmic_filenames.txt"
-    current_folder_name_path = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/output_models/ckpts"
+    training_filenames_path = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames_ablation/train_all_filenames.txt"
+    dynamic_filenames_path = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames_ablation/train_all_dynamic_mask.txt"
+    current_folder_name_path = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/output_models_ablations/ckpts"
 
-    
-
-    training_filenames_path_new = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames/train_all_filenames_V1.txt"
-    dynamic_filenames_path_new = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames/train_all_dyanmic_filenames_V1.txt"
+    training_filenames_path_new = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames_ablation/train_all_filenames_V1.txt"
+    dynamic_filenames_path_new = "/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames_ablation/train_all_dynamic_mask_V1.txt"
 
 
     

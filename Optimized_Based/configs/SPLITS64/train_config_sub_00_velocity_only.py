@@ -5,7 +5,7 @@ _C.TRAIN.DATASET = CN()
 
 _C.TRAIN.SEED=42
 _C.TRAIN.DATASET.BATCH_SIZE=1
-_C.TRAIN.DATASET.FILENAMES = ["/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames/filename_split64/sub_0.txt"]
+_C.TRAIN.DATASET.FILENAMES = ["/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames_ablation/filename_split8/sub_0.txt"]
 _C.TRAIN.DATASET.CLASS_NAMES = ['car']
 _C.TRAIN.DATASET.NUMS_OF_WORKERS= 4
 _C.TRAIN.DATASET.NUM_SOURCE_FRAMES=16
@@ -69,7 +69,7 @@ _C.EVAL.SURFACE_RENDERING.convergence_criteria=0.01
 _C.EVAL.SURFACE_RENDERING.NUM_ITERATIONS=1000
 _C.EVAL.SURFACE_RENDERING.NUM_RAYS=100
 _C.EVAL.SURFACE_RENDERING.PATCH_SIZE=[11,11]
-_C.TRAIN.CONFIG = "/home/2/ux04482/Split_Train/VSRD-V2/Optimized_Based/configs/SPLITS64"
+_C.TRAIN.CONFIG = "/home/2/ux04482/Ablations/VSRD_plus_plus/Optimized_Based/configs/SPLITS64/"
 
 
 # Modifications Here
@@ -83,6 +83,5 @@ _C.TRAIN.USE_DYNAMIC_MASK=True
 _C.TRAIN.USE_DYNAMIC_MODELING=True
 
 # Just for testing
-_C.TRAIN.DYNAMIC_LABELS_PATH="/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames/dynamic_split64/sub_0.txt"
-# selective from 'mlp', 'vector_velocity','scalar_velocity'
+_C.TRAIN.DYNAMIC_LABELS_PATH="/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/train_tsubame_filenames_ablation/dynamic_split8/sub_0.txt"
 _C.TRAIN.DYNAMIC_MODELING_TYPE='vector_velocity'
