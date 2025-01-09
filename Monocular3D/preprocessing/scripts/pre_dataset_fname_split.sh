@@ -4,7 +4,7 @@ cd ..
 cd dataset_split/pre_dataset_split
 
 root_dirname="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-pseudo_labels_dirname="/media/zliu/data12/dataset/CVPR24_VSRD_Results/VSRDPP_Pesudo_Labels/"
+pseudo_labels_dirname="/media/zliu/data12/TPAMI_Results/Stage1_Expermental_Results/VSRD_Vanilla"
 training_split="00,02,04,05,06,09"
 valiation_split="03,07"
 testing_split="10"
@@ -56,11 +56,10 @@ cd ..
 cd dataset_split/pre_dataset_split
 
 root_dirname="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-pseudo_labels_dirname="/media/zliu/data12/dataset/CVPR24_VSRD_Results/VSRDPP_Pesudo_Labels/"
-output_dataset_path="/media/zliu/data12/dataset/TPAMI_Stage2/NEW_VSRDPP25_LABEL/VSRD_PP_SPLIT"
-output_dataset_splits_filename_path="/media/zliu/data12/dataset/TPAMI_Stage2/NEW_VSRDPP25_LABEL/VSRD_PP_SPLIT"
-sync_folder_path="/home/zliu/TPAMI25/Sync_Files/"
-
+pseudo_labels_dirname="/media/zliu/data12/TPAMI_Results/Stage1_Expermental_Results/Autolabels_Re_Train/pseudo_labels_txt/"
+output_dataset_path="/media/zliu/data12/TPAMI_Results/Stage1_Expermental_Results/Synced_For_Evaluations/Splits_2024/Autolabels_Re_Train"
+output_dataset_splits_filename_path="/media/zliu/data12/TPAMI_Results/Stage1_Expermental_Results/Synced_For_Evaluations/Splits_2024/Autolabels_Re_Train"
+sync_folder_path="/media/zliu/data12/TPAMI_Results/Stage1_Expermental_Results/Autolabels_Re_Train/Sync_Files/"
 python split_dynamic_static_by_sync_file.py --root_dirname $root_dirname \
                                     --pseudo_labels_dirname $pseudo_labels_dirname \
                                     --output_dataset_path $output_dataset_path \
@@ -69,10 +68,5 @@ python split_dynamic_static_by_sync_file.py --root_dirname $root_dirname \
 
 }
 
-
-
-# SPLIT_THE_FNAME_BY_SEQUENCE
-
-# SPLIT_THE_FNAME_BY_DYNAMIC
-
-SPLIT_THE_FNAME_BY_DYNAMIC_From_SYNC_FILE
+SPLIT_THE_FNAME_BY_SEQUENCE
+# SPLIT_THE_FNAME_BY_DYNAMIC_From_SYNC_FILE

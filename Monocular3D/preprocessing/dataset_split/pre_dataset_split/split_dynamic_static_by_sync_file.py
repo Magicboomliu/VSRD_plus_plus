@@ -52,9 +52,15 @@ if __name__=="__main__":
     
     
 
+
     root_dirname = args.root_dirname
     prediction_label_path = os.path.join(args.pseudo_labels_dirname,"predictions")
     gt_label_path_with_dynamic = os.path.join(args.pseudo_labels_dirname,"my_gts_with_dynamic")
+    
+    
+    assert os.path.exists(prediction_label_path)
+    assert os.path.exists(gt_label_path_with_dynamic)
+
     
     
     # training/validation/testing splits
@@ -68,6 +74,7 @@ if __name__=="__main__":
     assert os.path.exists(training_validation_txt_filename)
     assert os.path.exists(testing_txt_filename)
     
+    
     # sync for training and testing
     training_sync_fname = os.path.join(args.sync_folder_path,'training','sync_file.txt')
     testing_sync_fname = os.path.join(args.sync_folder_path,'testing','sync_file.txt')
@@ -75,6 +82,8 @@ if __name__=="__main__":
     assert os.path.exists(training_sync_fname)
     assert os.path.exists(testing_sync_fname)
     
+    
+
     
     # output folder
     output_folder = args.output_dataset_path
@@ -119,10 +128,12 @@ if __name__=="__main__":
         source_image_2,training_sync_target_image_2,source_image_3,training_sync_target_image_3,gt_label_path,training_sync_target_label_gt = splits
         
         old_root_dirname = source_image_2[:-len(extract_from_2013_regex(source_image_2))]
+
         
         # Image 2
         current_source_image_2 = source_image_2.replace(old_root_dirname,os.path.join(root_dirname,'data_2d_raw/'))
         current_syned_target_image_2 = os.path.join(output_folder_training_image_2_folder_path,os.path.basename(training_sync_target_image_2))
+        
         assert os.path.exists(current_source_image_2)
 
         # Image 3
@@ -134,6 +145,12 @@ if __name__=="__main__":
         # Label 2
         current_source_label_2 =  os.path.join(prediction_label_path,extract_from_2013_regex(source_image_2)).replace(".png",".txt")
         current_syned_target_label_2 = os.path.join(output_folder_training_label_2_folder_path,os.path.basename(training_sync_target_image_2)).replace(".png",".txt")
+        
+        if not os.path.exists(current_source_label_2):
+            current_source_label_2 = current_source_label_2.replace("Autolabels_Re_Train","VSRD_Vanilla")
+
+
+
         assert os.path.exists(current_source_label_2)
         
         # Label GT
@@ -207,6 +224,10 @@ if __name__=="__main__":
         # Label 2
         current_source_label_2 =  os.path.join(prediction_label_path,extract_from_2013_regex(source_image_2)).replace(".png",".txt")
         current_syned_target_label_2 = os.path.join(output_folder_testing_label_2_folder_path,os.path.basename(training_sync_target_image_2)).replace(".png",".txt")
+        
+        if not os.path.exists(current_source_label_2):
+            current_source_label_2 = current_source_label_2.replace("Autolabels_Re_Train","VSRD_Vanilla")
+        
         assert os.path.exists(current_source_label_2)
         
         

@@ -18,7 +18,6 @@ import scipy as sp
 
 import inflection
 import torch.utils.tensorboard
-
 import sys
 
 import vsrd.datasets
@@ -164,7 +163,6 @@ def make_predictions(
         target_image_filename = sampled_image_filenames[instance_ids]
         # get the instance dynamic list
         instance_dynamic_list = dynamic_instance_list[instance_ids]
-        
         # image direction filenames
         target_image_dirname = os.path.splitext(os.path.relpath(target_image_filename, root_dirname))[0]
         # get the models ckpts

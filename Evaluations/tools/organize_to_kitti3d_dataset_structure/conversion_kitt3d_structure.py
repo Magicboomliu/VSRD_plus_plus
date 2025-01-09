@@ -105,7 +105,7 @@ def main(args):
     sync_training_list = []
     for seq in training_splits_list:
         label_2_folder = os.path.join(gt_label_path,seq,"image_00/data_rect/")
-        for label_name in sorted(os.listdir(label_2_folder)):
+        for label_name in tqdm(sorted(os.listdir(label_2_folder))):
             
             base_filename = f"{str(idx).zfill(6)}"
 
@@ -119,6 +119,9 @@ def main(args):
             
             # copy label_est
             label_est_name_abs = label_2_name_abs.replace(gt_label_path,prediction_label_path)
+            
+            if not os.path.exists(label_est_name_abs):
+                continue
             assert os.path.exists(label_est_name_abs)
             saved_label_est = os.path.join(output_folder_training_label_est_folder_path,base_filename+".txt")
             if not os.path.exists(saved_label_est):
@@ -169,7 +172,7 @@ def main(args):
     sync_testing_list = []
     for seq in testing_splits_list:
         label_2_folder = os.path.join(gt_label_path,seq,"image_00/data_rect/")
-        for label_name in sorted(os.listdir(label_2_folder)):
+        for label_name in tqdm(sorted(os.listdir(label_2_folder))):
             
             base_filename = f"{str(idx).zfill(6)}"
 
@@ -182,6 +185,8 @@ def main(args):
             
             # copy label_est
             label_est_name_abs = label_2_name_abs.replace(gt_label_path,prediction_label_path)
+            if not os.path.exists(label_est_name_abs):
+                continue
             assert os.path.exists(label_est_name_abs)
             saved_label_est = os.path.join(output_folder_testing_label_est_folder_path,base_filename+".txt")
             if not os.path.exists(saved_label_est):

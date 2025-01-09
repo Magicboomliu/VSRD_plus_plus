@@ -21,7 +21,6 @@ def eval_from_scrach(gt_dir, det_dir, ap_mode=40):
         det_f = np.loadtxt(os.path.join(det_dir, f), dtype=str).reshape(-1, 16)
         
 
-        
 
         gt = {}
         det = {}
@@ -86,10 +85,10 @@ if __name__=='__main__':
     # KITTI3D_VSRD_Vanilla
     #KITTI3D_Velocity_Only
     
-    pd_dir_folder = "/media/zliu/data12/dataset/Autolabels_SSS/training/label_est"
-    gt_dir_folder = "/media/zliu/data12/dataset/Autolabels_SSS/training/label_2"
-    
-
+    pd_dir_folder = "/home/zliu/CVPR2025/VSRDPP_Stage2_Experiments/SensetimeJapan_Internship/output/exp_monoflex_update_V2/kitti_train/inference_11008/data"
+    gt_dir_folder = "/data1/liu/KITTI360_SoftLink/KITTI360_VSRDPP_V1/training/label_2/"
+    # "/data1/liu/KITTI360_SoftLink/KITTI360_VSRDPP_V1/testing/label_2/"
+    # "/data1/liu/KITTI360_SoftLink/KITTI360_VSRDPP_V1/training/label_2/"
     
     eval_from_scrach(gt_dir=gt_dir_folder,
                      det_dir=pd_dir_folder,ap_mode=40)
