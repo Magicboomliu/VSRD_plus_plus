@@ -61,6 +61,7 @@ import multiprocessing
 from vsrd.distributed.loader import DistributedDataLoader
 
 # Initialization
+from preprocessing.Initial_Attributes.Get_Initial_Attributes import Get_Initial_Attributes
 import argparse
 
 
@@ -99,7 +100,6 @@ def encode_location(decoded_locations):
     encoded_locations = torch.where(torch.isneginf(encoded_locations), torch.tensor(-4.0).to(encoded_locations.device), encoded_locations)
     return encoded_locations
 
-
 def encode_orientation(rotation_matrices):
     # 提取 rotation_matrices 中的 cos 和 sin 值
     cos = rotation_matrices[..., 0, 0]
@@ -110,12 +110,29 @@ def encode_orientation(rotation_matrices):
 
 
 def main(args=None):
+
+    from Optimized_Based.configs.SPLITS64.train_config_sub_00_proj_only import _C as my_conf_train
+    
+    N_SPLITS = 64
+    FIND_FLAG = False
+    for i in range(N_SPLITS):
+        suffix = f"{i:02}"
+        
+        if suffix==args.config_path:
+            my_conf_train.TRAIN.DATASET.FILENAMES = [my_conf_train.TRAIN.DATASET.FILENAMES[0].replace("sub_0","sub_{}".format(i))]
+            assert os.path.exists(my_conf_train.TRAIN.DATASET.FILENAMES[0])
+            my_conf_train.TRAIN.DYNAMIC_LABELS_PATH = my_conf_train.TRAIN.DYNAMIC_LABELS_PATH.replace("sub_0","sub_{}".format(i))
+            assert os.path.exists(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)   
+            
+            print(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)
+            print(my_conf_train.TRAIN.DATASET.FILENAMES[0])
+                  
+            FIND_FLAG = True
+
+    assert FIND_FLAG == True
+    
     
 
-    if args.config_path=='test':
-        from Optimized_Based.configs.train_config_ddp import _C as my_conf_train
-    
-    
     # DDP Settings
     # configuration
     if my_conf_train.TRAIN.DDP.LAUNCHER == "slurm":
@@ -165,23 +182,58 @@ def main(args=None):
     
     dataset_rectification = my_conf_train.TRAIN.DATASET.RECTIFICATION
     train_batch_size = my_conf_train.TRAIN.DATASET.BATCH_SIZE # 1 by default
+    
 
+    # Model TYPE Here
+    MODEL_TYPE =my_conf_train.TRAIN.MODEL_TYPE
+    
+    if MODEL_TYPE =='Proj_Only':
+        
+        loss_weight_list = {
+                            "iou_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.IOU_PROJECTION_LOSS,
+                            "l1_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.L1_PROJECTION_LOSS,
+                            "photometric_loss":my_conf_train.TRAIN.LOSS_WEIGHT.PHOTOMETRIC_LOSS,
+                            "radiance_loss":my_conf_train.TRAIN.LOSS_WEIGHT.RADIANCE_LOSS,
+                            "silhouette_loss":my_conf_train.TRAIN.LOSS_WEIGHT.SILHOUETTE_LOSS}
 
-    loss_weight_list = {"eikonal_loss":my_conf_train.TRAIN.LOSS_WEIGHT.EIKONAL_LOSS,
-                        "iou_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.IOU_PROJECTION_LOSS,
-                        "l1_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.L1_PROJECTION_LOSS,
-                        "photometric_loss":my_conf_train.TRAIN.LOSS_WEIGHT.PHOTOMETRIC_LOSS,
-                        "radiance_loss":my_conf_train.TRAIN.LOSS_WEIGHT.RADIANCE_LOSS,
-                        "silhouette_loss":my_conf_train.TRAIN.LOSS_WEIGHT.SILHOUETTE_LOSS}
+        param_group_names = [
+                "detector/locations",
+                "detector/dimensions",
+                "detector/orientations",
+                "detector/embeddings",
+            ]
+        
+    elif MODEL_TYPE =='Proj_Render':
+        
+        loss_weight_list = {
+                            "iou_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.IOU_PROJECTION_LOSS,
+                            "l1_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.L1_PROJECTION_LOSS,
+                            "photometric_loss":my_conf_train.TRAIN.LOSS_WEIGHT.PHOTOMETRIC_LOSS,
+                            "radiance_loss":my_conf_train.TRAIN.LOSS_WEIGHT.RADIANCE_LOSS,
+                            "silhouette_loss":my_conf_train.TRAIN.LOSS_WEIGHT.SILHOUETTE_LOSS}
+        param_group_names = [
+                "detector/locations",
+                "detector/dimensions",
+                "detector/orientations",
+                "detector/embeddings",
+            ]
+    
+    
+    else:
+        loss_weight_list = {"eikonal_loss":my_conf_train.TRAIN.LOSS_WEIGHT.EIKONAL_LOSS,
+                            "iou_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.IOU_PROJECTION_LOSS,
+                            "l1_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.L1_PROJECTION_LOSS,
+                            "photometric_loss":my_conf_train.TRAIN.LOSS_WEIGHT.PHOTOMETRIC_LOSS,
+                            "radiance_loss":my_conf_train.TRAIN.LOSS_WEIGHT.RADIANCE_LOSS,
+                            "silhouette_loss":my_conf_train.TRAIN.LOSS_WEIGHT.SILHOUETTE_LOSS}
 
-
-    param_group_names = [
-            "detector/locations",
-            "detector/dimensions",
-            "detector/orientations",
-            "detector/embeddings",
-            "hyper_distance_field"
-        ]
+        param_group_names = [
+                "detector/locations",
+                "detector/dimensions",
+                "detector/orientations",
+                "detector/embeddings",
+                "hyper_distance_field"
+            ]
 
     target_transforms=[Resizer(image_size=target_transforms_resize_size),
                            MaskAreaFilter(min_mask_area=target_transforms_min_mask_area1),
@@ -198,7 +250,6 @@ def main(args=None):
                            BoxGenerator(),
                            BoxSizeFilter(min_box_size=source_transforms_min_box_size),
                            SoftRasterizer()]
-
 
     # ====================================================================================================
     # datasets
@@ -225,7 +276,6 @@ def main(args=None):
 
     # Using Dynamic Masks Or Not
     USE_DYNAMIC_MODELING_FLAG = my_conf_train.TRAIN.USE_DYNAMIC_MODELING
-    
     USE_DYNAMIC_MASK_FLAG = my_conf_train.TRAIN.USE_DYNAMIC_MASK
     DYNAMIC_TYPE = my_conf_train.TRAIN.DYNAMIC_MODELING_TYPE
     USE_RDF_MODELING_FLAG = my_conf_train.TRAIN.USE_RDF_MODELING
@@ -258,6 +308,7 @@ def main(args=None):
             dynamic_labels_for_target_view["instance_ids"] = []
             dynamic_labels_for_target_view["dynamic_labels"] = []
             
+            # No Dynamic FLAG
             if USE_DYNAMIC_MODELING_FLAG:
                 if USE_DYNAMIC_MASK_FLAG:
                     dynamic_raw_contents = read_text_lines(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)
@@ -270,10 +321,18 @@ def main(args=None):
                             break
             
             
-            # Output Locations
-            ckpt_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "ckpts/{}".format(my_conf_train.TRAIN.MODEL_TYPE)),image_dirname)
-            log_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "logs"),image_dirname)
-            out_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "outs"),image_dirname)
+            
+            os.makedirs(args.saved_ckpt_path,exist_ok=True)
+            ckpt_dirname_root = os.path.join(args.saved_ckpt_path,"ckpts")
+            log_dirname_root = os.path.join(args.saved_ckpt_path,"logs")
+            out_dirname_root = os.path.join(args.saved_ckpt_path,"outs")
+            
+            ckpt_dirname = os.path.join(ckpt_dirname_root,image_dirname)
+            log_dirname = os.path.join(log_dirname_root,image_dirname)
+            out_dirname = os.path.join(out_dirname_root,image_dirname)
+            
+            
+        
             if os.path.exists(os.path.join(ckpt_dirname, f"step_{my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS - 1}.pt")):
                 logger.warning(f"[{image_filename}] Already optimized. Skip this sample.")
                 continue
@@ -348,22 +407,20 @@ def main(args=None):
                 models['hyper_distance_field'] = hyper_distance_field
                 
             models['positional_encoder'] = positional_encoder
+            
             if USE_DYNAMIC_MODELING_FLAG and  DYNAMIC_TYPE=='mlp':
                 models['detector_residual'] = box_residual_detector  # Using MLP For Learning
+    
             for model in models.values():
-                model.to(device_id)
-                
+                model.to(device_id)                
             logger.info(f"Models: {models}")
             
-        
-        
+            
+
             '''Data Alignment with Target Views'''
             for source_inputs in multi_inputs.values():
-                
                 source_instance_indices = [] 
-
                 for source_instance_ids, target_instance_ids in zip(source_inputs.instance_ids, target_inputs.instance_ids):
-                    
                     indices = [
                         source_instance_ids.tolist().index(target_instance_id.item()) 
                         if target_instance_id in source_instance_ids else -1 
@@ -428,10 +485,9 @@ def main(args=None):
             if USE_DYNAMIC_MODELING_FLAG:
                 if USE_DYNAMIC_MASK_FLAG:
                     dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
-                    
                     dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
             
-                        
+
             # ================================================================
             # optimizer
             if USE_DYNAMIC_MODELING_FLAG and  DYNAMIC_TYPE=='mlp':
@@ -467,15 +523,21 @@ def main(args=None):
                 ], lr=0.01) 
             
             else:
-                optimizer = optim.Adam([
-                    {'params': models.detector.locations, 'lr': 0.01},
-                    {'params': models.detector.dimensions, 'lr': 0.01},
-                    {'params': models.detector.orientations, 'lr': 0.01},
-                    {'params': models.detector.embeddings, 'lr': 0.001},
-                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
-                ], lr=0.01) 
-
-
+                if MODEL_TYPE=="Proj_Only" or MODEL_TYPE=="Proj_Render":
+                    optimizer = optim.Adam([
+                        {'params': models.detector.locations, 'lr': 0.01},
+                        {'params': models.detector.dimensions, 'lr': 0.01},
+                        {'params': models.detector.orientations, 'lr': 0.01}
+                    ], lr=0.01) 
+                    
+                else:
+                    optimizer = optim.Adam([
+                        {'params': models.detector.locations, 'lr': 0.01},
+                        {'params': models.detector.dimensions, 'lr': 0.01},
+                        {'params': models.detector.orientations, 'lr': 0.01},
+                        {'params': models.detector.embeddings, 'lr': 0.001},
+                        {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
+                    ], lr=0.01) 
             # ================================================================
             # LR scheduler
             gamma = 0.01 ** (1.0 / 3000.0)
@@ -558,88 +620,19 @@ def main(args=None):
                     # inference here
                     with torch.enable_grad(): 
                         optimizer.zero_grad()     
-                        world_outputs = utils.Dict.apply(models.detector()) #['boxes_3d', 'locations', 'dimensions', 'orientations', 'embeddings']               
-
-            
-                        # Compute the Box Residual: If Using the Dynamic Modeling
-                        if step>=my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
-                            relative_index_list = [relative_index for relative_index in multi_inputs.keys()]
-                            if USE_DYNAMIC_MODELING_FLAG:
-                                if DYNAMIC_TYPE=='mlp':
-                                
-                                    relative_box_residual = models.detector_residual(relative_index_list,world_outputs.embeddings)
-                                    
-                                elif DYNAMIC_TYPE=='vector_velocity':
-                                    current_velocity = models['detector'].velocity #[1,8,3]
-                                    current_velocity = current_velocity.unsqueeze(-2)
-                                    relative_box_residual_list = [current_velocity *t for t in relative_index_list]
-                                    relative_box_residual = torch.cat(relative_box_residual_list,dim=-2)
-                                
-                                elif DYNAMIC_TYPE=='scalar_velocity':
-                                    current_velocity_scalar = models['detector'].scalar_velocity #[1,8,1]
-                                    current_velocity_direction = world_outputs.velocity_direction #[1,8,3]
-                                    current_velocity =  current_velocity_direction * current_velocity_scalar
-                                    current_velocity = current_velocity.unsqueeze(-2)
-                                    relative_box_residual_list = [current_velocity *t for t in relative_index_list]
-                                    relative_box_residual = torch.cat(relative_box_residual_list,dim=-2)
-                                
-                                else:
-                                    NotImplementedError
-                            
-                            else:
-                                # vanallia VSRD
-                                #FIXME Here
-                                relative_box_residual = torch.zeros((1,nums_of_instance_number,nums_of_source_images_integrated_into_rendering,3)).to(device_id)
-
+                        world_outputs = utils.Dict.apply(models.detector())    
+                        relative_box_residual = torch.zeros((1,nums_of_instance_number,nums_of_source_images_integrated_into_rendering,3)).to(device_id)
 
                         # ================================= multi-view projection ======================================================
                         multi_outputs = utils.DefaultDict(utils.Dict)
                                             
                         # This is the shared base 3D Bounding Boxes
                         world_boxes_3d = nn.functional.pad(world_outputs.boxes_3d, (0, 1), mode="constant", value=1.0) #(1,num_of_instances,8,4)
-
-
-                        if USE_DYNAMIC_MODELING_FLAG:
-                            if USE_DYNAMIC_MASK_FLAG:
-                                # Align the dynamic mask with the current output.                            
-                                dynamic_mask_for_target_view_for_output = get_dynamic_mask_for_the_world_output(target_inputs=target_inputs,
-                                                                                                                world_boxes_3d=world_boxes_3d,
-                                                                                                                dynamic_mask_for_target_view=dynamic_mask_for_target_view)
-
-                                
                                 
                         '''Get all box_3d(at each source view cam coordiante and its projected 2d boxes)'''
                         current_idx = 0
                         for relative_index, inputs in multi_inputs.items():
-                            # Learn the Box Residual 
-                            if step>=my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
-                                # Get the current residual.
-                                if USE_DYNAMIC_MODELING_FLAG:
-                                    current_location_residual = relative_box_residual[:,:,current_idx,:] #(B,nums_of_instances,3)
-                                else:
-                                    # They are all Zeros for Vanallia VSRD
-                                    current_batch_size = world_boxes_3d.shape[0]
-                                    current_instance_numbers = world_boxes_3d.shape[1]
-                                    current_location_residual = torch.zeros((current_batch_size,current_instance_numbers,3)).to(world_boxes_3d.device)
-                                
-                                # Using Dynamic Model Flg
-                                if USE_DYNAMIC_MODELING_FLAG:
-                                    if USE_DYNAMIC_MASK_FLAG:                                
-                                        dynamic_mask_for_target_view_for_output_tensor = torch.from_numpy(np.array(dynamic_mask_for_target_view_for_output)).unsqueeze(0).unsqueeze(-1).to(current_location_residual.device).float()
-                                        current_location_residual = current_location_residual * dynamic_mask_for_target_view_for_output_tensor
-                                
-                                current_world_boxes_3d = decode_box_3d(locations=world_outputs.locations,
-                                                dimensions=world_outputs.dimensions,
-                                                orientations=world_outputs.orientations,
-                                                residual = current_location_residual)
-                                current_world_boxes_3d = nn.functional.pad(current_world_boxes_3d, (0, 1), mode="constant", value=1.0) #(1,4,8,4)
-                            
-                            else:
-                                # without the world boxes 3d
-                                current_world_boxes_3d = world_boxes_3d
-    
-                                
-                            # different idx for diferent instances
+                            current_world_boxes_3d = world_boxes_3d
                             current_idx = current_idx + 1
                             # from world to camera coordinate at the target frames.
                             camera_boxes_3d = torch.einsum("bmn,b...n->b...m", inputs.extrinsic_matrices, current_world_boxes_3d)
@@ -720,7 +713,6 @@ def main(args=None):
                             ], dim=0)
                             for outputs, inputs in zip(multi_outputs.values(), multi_inputs.values())
                         ], dim=0))
-                        
                         
                         
                         # ----------------------------------------------------------------
@@ -828,175 +820,58 @@ def main(args=None):
 
                             return wrapper
 
-                        # bigger than optimized residual box steps: using RDF
-                        if step >= my_conf_train.TRAIN.OPTIMIZATION_RESIDUAL_BOX_STEPS:
-                            # Compute the Residual Signed Distance.
-                            # #(1,4,1617), here the 1617 is the unit numbers.
-                            distance_field_weights = models.hyper_distance_field(world_outputs.embeddings)             
-                            world_outputs.update(distance_field_weights=distance_field_weights)
-
-                            soft_distance_fields = []
-
-                            for locations, dimensions, orientations, distance_field_weights in zip(
-                                world_outputs.locations,
-                                world_outputs.dimensions,
-                                world_outputs.orientations,
-                                world_outputs.distance_field_weights):
-                                
-                                
-                                # 初始化一个列表来存储每个实例的距离场
-                                distance_fields = []
-                                # 遍历场景中的每个实例，提取位置、尺寸、方向和距离场权重，并生成实例标签
-                                for instance_label, (location, dimension, orientation, distance_field_weights) in enumerate(zip(
-                                    locations,
-                                    dimensions,
-                                    orientations,
-                                    distance_field_weights)):
-                                    
-                                    if USE_DYNAMIC_MASK_FLAG:
-                                        if dynamic_mask_for_target_view_for_output[instance_label]:
-                                            # dynamic objects
-                                            instance_wise_box_residual = relative_box_residual[:,instance_label,:,:] # [1,16,3]
-                                            
-                                        else:
-                                            # static objects
-                                            current_relative_box_residual = torch.zeros_like(relative_box_residual)
-                                            instance_wise_box_residual = current_relative_box_residual[:,instance_label,:,:]
-                                        
-                                    else:
-                                        if USE_DYNAMIC_MODELING_FLAG:
-                                            instance_wise_box_residual = relative_box_residual[:,instance_label,:,:] # [1,16,3]
-                                        else:
-                                            # FIXME
-                                            instance_wise_box_residual = torch.zeros((1,nums_of_source_images_integrated_into_rendering,3)).to(device)
-
-
-
-                                    initial_distance_field_per_instance_before_union_list = []
-                                    base_distance_field = rendering.sdfs.box(dimension)
-                                    
-                                    # 使用residual_distance_field包裹距离场函数
-                                    residual_field = residual_distance_field(
-                                        distance_field=functools.partial(
-                                            models.hyper_distance_field.distance_field,
-                                            distance_field_weights,
-                                        ),)
-
-                                    # 组合基础距离场和残差距离场
-                                    combined_field = residual_composition(
-                                            distance_field=base_distance_field,
-                                            residual_distance_field=residual_field)
-                                    
-                                    # 应用实例标签
-                                    instance_field_with_label = instance_field(
-                                        distance_field=combined_field,
-                                        instance_label=dimension.new_tensor(instance_label, dtype=torch.long))
-
-                                    # 应用旋转变换
-                                    rotated_field = rendering.sdfs.rotation(
-                                        instance_field_with_label,
-                                        orientation)
-
-
-                                    # Here multiple across the the image frames
-                                    for current_frame_idx in range(len(multi_inputs.keys())):
-                                        current_location_residual = instance_wise_box_residual[:,current_frame_idx,:]
-                                        translated_field = rendering.sdfs.translation(
-                                                                rotated_field,
-                                                                location + current_location_residual)         
-                                        # M's translation field
-                                        initial_distance_field_per_instance_before_union_list.append(translated_field)
-                                        
-                                    # 将处理后的距离场添加到实例列表中
-                                    distance_fields.append(initial_distance_field_per_instance_before_union_list)
-
-
-                                for current_frame_idx in range(len(multi_inputs.keys())):
-                                    current_distance_fields = [d[current_frame_idx] for d in distance_fields] # get current distance fields
-                                    # 将所有实例的距离场进行软联合
-                                    soft_distance_field = soft_union(
-                                        distance_fields=current_distance_fields,
-                                        temperature=sdf_union_temperature)
-                                    # 将处理后的软距离场添加到场景列表中: length should be eight
-                                    soft_distance_fields.append(soft_distance_field)
-
-
-                        # only learn the bouding boxes
-                        else:
-                            # learn the static
-                            if step >= my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
-                                # using dynamic modeling flag
-                                if USE_DYNAMIC_MODELING_FLAG:
-                                    boxes_residuals = relative_box_residual
-                                else:
-                                    boxes_residuals = torch.zeros(1,8,nums_of_source_images_integrated_into_rendering,3).to(device)
-                            # learn the residual   
-                            else:
-                                boxes_residuals = torch.zeros(1,8,nums_of_source_images_integrated_into_rendering,3).to(device)
+                        boxes_residuals = torch.zeros(1,8,nums_of_source_images_integrated_into_rendering,3).to(device)
                            
+                            
+                        # 初始化一个列表来存储软距离场
+                        soft_distance_fields = []
+                        # 遍历每个场景的输出，提取位置、尺寸和方向
+                        for locations, dimensions, orientations in zip(
+                            world_outputs.locations,
+                            world_outputs.dimensions,
+                            world_outputs.orientations,
+                        ):
+                            # 初始化一个列表来存储每个实例的距离场
+                            distance_fields = []
+                            # 遍历场景中的每个实例，提取位置、尺寸和方向，并生成实例标签
+                            for instance_label, (location, dimension, orientation) in enumerate(zip(locations,dimensions,orientations)):
                                 
-            
-                            # 初始化一个列表来存储软距离场
-                            soft_distance_fields = []
-                            # 遍历每个场景的输出，提取位置、尺寸和方向
-                            for locations, dimensions, orientations in zip(
-                                world_outputs.locations,
-                                world_outputs.dimensions,
-                                world_outputs.orientations,
-                            ):
-                                # 初始化一个列表来存储每个实例的距离场
-                                distance_fields = []
-                                # 遍历场景中的每个实例，提取位置、尺寸和方向，并生成实例标签
-                                for instance_label, (location, dimension, orientation) in enumerate(zip(locations,dimensions,orientations)):
-                                    
-                                    if USE_DYNAMIC_MASK_FLAG:
-                                        if dynamic_mask_for_target_view_for_output[instance_label]:
-                                            # dynamic objects
-                                            instance_wise_box_residual = boxes_residuals[:,instance_label,:,:] # [1,16,3]
-                                            
-                                        else:
-                                            # static objects
-                                            current_boxes_residuals = torch.zeros_like(boxes_residuals)
-                                            instance_wise_box_residual = current_boxes_residuals[:,instance_label,:,:] # [1,16,3]
-                                    else:
-                                        instance_wise_box_residual = boxes_residuals[:,instance_label,:,:] # [1,16,3]
-                                            
-                                        
-                                    initial_distance_field_per_instance_before_union_list = []
-                                    # 构建基础的盒子距离场
-                                    base_distance_field = rendering.sdfs.box(dimension)
-                                    # 创建带有实例标签的距离场
-                                    instance_field_with_label = instance_field(
-                                        distance_field=base_distance_field,
-                                        instance_label=dimension.new_tensor(instance_label, dtype=torch.long)
-                                    )
-                                    rotated_field = rendering.sdfs.rotation(
-                                        instance_field_with_label,
-                                        orientation)
+                                instance_wise_box_residual = boxes_residuals[:,instance_label,:,:] # [1,16,3]
+                                initial_distance_field_per_instance_before_union_list = []
+                                # 构建基础的盒子距离场
+                                base_distance_field = rendering.sdfs.box(dimension)
+                                # 创建带有实例标签的距离场
+                                instance_field_with_label = instance_field(
+                                    distance_field=base_distance_field,
+                                    instance_label=dimension.new_tensor(instance_label, dtype=torch.long)
+                                )
+                                rotated_field = rendering.sdfs.rotation(
+                                    instance_field_with_label,
+                                    orientation)
 
-                                    # Here multiple across the the image frames
-                                    for current_frame_idx in range(len(multi_inputs.keys())):
-                                        current_location_residual = instance_wise_box_residual[:,current_frame_idx,:]
-                                        # 应用平移变换
-                                        translated_field = rendering.sdfs.translation(
-                                                                rotated_field,
-                                                                location + current_location_residual)         
-                                        # M's translation field
-                                        initial_distance_field_per_instance_before_union_list.append(translated_field)
-
-                                    # 将处理后的距离场添加到实例列表中
-                                    distance_fields.append(initial_distance_field_per_instance_before_union_list)
-
-                                # 将所有实例的距离场进行软联合
+                                # Here multiple across the the image frames
                                 for current_frame_idx in range(len(multi_inputs.keys())):
-                                    current_distance_fields = [d[current_frame_idx] for d in distance_fields] # get current distance fields
-                                    # 将所有实例的距离场进行软联合
-                                    soft_distance_field = soft_union(
-                                        distance_fields=current_distance_fields,
-                                        temperature=sdf_union_temperature)
-                                    
-                                    # 将处理后的软距离场添加到场景列表中
-                                    soft_distance_fields.append(soft_distance_field)
+                                    current_location_residual = instance_wise_box_residual[:,current_frame_idx,:]
+                                    # 应用平移变换
+                                    translated_field = rendering.sdfs.translation(
+                                                            rotated_field,
+                                                            location + current_location_residual)         
+                                    # M's translation field
+                                    initial_distance_field_per_instance_before_union_list.append(translated_field)
+
+                                # 将处理后的距离场添加到实例列表中
+                                distance_fields.append(initial_distance_field_per_instance_before_union_list)
+
+                            # 将所有实例的距离场进行软联合
+                            for current_frame_idx in range(len(multi_inputs.keys())):
+                                current_distance_fields = [d[current_frame_idx] for d in distance_fields] # get current distance fields
+                                # 将所有实例的距离场进行软联合
+                                soft_distance_field = soft_union(
+                                    distance_fields=current_distance_fields,
+                                    temperature=sdf_union_temperature)
+                                
+                                # 将处理后的软距离场添加到场景列表中
+                                soft_distance_fields.append(soft_distance_field)
 
 
                         soft_distance_fields = [soft_distance_fields]
@@ -1098,34 +973,21 @@ def main(args=None):
                         
                         silhouttle_loss_list_before_mean = torch.cat(silhouttle_loss_list_before_mean_list,dim=-2).squeeze(1)
                         silhouette_loss = torch.mean(silhouttle_loss_list_before_mean)
-                    
 
-
-
-                        if USE_DYNAMIC_MODELING_FLAG:
-                            if USE_DYNAMIC_MASK_FLAG:
-                                losses = Dict(
+                        
+                        if MODEL_TYPE =='Proj_Only':
+                            losses = Dict(
+                                    iou_projection_loss=iou_projection_loss,
+                                    l1_projection_loss=l1_projection_loss)
+                        elif MODEL_TYPE =="Proj_Render":
+                            losses = Dict(
                                     iou_projection_loss=iou_projection_loss,
                                     l1_projection_loss=l1_projection_loss,
                                     silhouette_loss=silhouette_loss)
-                                
                         else:
-                            losses = Dict(
-                                iou_projection_loss=iou_projection_loss,
-                                l1_projection_loss=l1_projection_loss,
-                                silhouette_loss=silhouette_loss,
-                            )
-                            
-                                
+                            raise NotImplementedError
 
-                        if step >= my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
-                            eikonal_loss = nn.functional.mse_loss(
-                                input=torch.norm(multi_sampled_gradients, dim=-1),
-                                target=multi_sampled_gradients.new_ones(*multi_sampled_gradients.shape[:-1]),
-                                reduction="mean",
-                            )
-                            losses.update(eikonal_loss=eikonal_loss)
-                        
+                    
                         
                         loss = sum(loss * loss_weight_list[name] for name, loss in losses.items())
                         
@@ -1219,6 +1081,7 @@ def main(args=None):
                                 writer.add_scalar(f"scalars/{name}", metric, step)
 
                         if not (step + 1) % my_conf_train.TRAIN.LOGGING.CKPT_INTERVALS:
+                    
                             saver.save(
                                 filename=f"step_{step}.pt",
                                 step=step,
@@ -1248,6 +1111,13 @@ def parse_args():
         help="Path to pretrained model or model identifier from huggingface.co/models.")
 
     parser.add_argument(
+        "--saved_ckpt_path",
+        type=str,
+        default=None,
+        help="Path to pretrained model or model identifier from huggingface.co/models.")
+
+
+    parser.add_argument(
         "--device_id",
         type=int,
         default=None,
@@ -1256,7 +1126,6 @@ def parse_args():
 
     # get the local rank
     args = parser.parse_args()
-
 
     return args
 
