@@ -56,10 +56,10 @@ cd ..
 cd dataset_split/pre_dataset_split
 
 root_dirname="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-pseudo_labels_dirname="/media/zliu/data12/TPAMI_Results/Stage1_Expermental_Results/Autolabels_Re_Train/pseudo_labels_txt/"
-output_dataset_path="/media/zliu/data12/TPAMI_Results/Stage1_Expermental_Results/Synced_For_Evaluations/Splits_2024/Autolabels_Re_Train"
-output_dataset_splits_filename_path="/media/zliu/data12/TPAMI_Results/Stage1_Expermental_Results/Synced_For_Evaluations/Splits_2024/Autolabels_Re_Train"
-sync_folder_path="/media/zliu/data12/TPAMI_Results/Stage1_Expermental_Results/Autolabels_Re_Train/Sync_Files/"
+pseudo_labels_dirname="/media/zliu/data12/TPAMI_Results/TPAMI_Ablations/Velocity_Project_and_Sil_Loss/pseudo_labels_txt/"
+output_dataset_path="/media/zliu/data12/TPAMI_Results/TPAMI_Ablations/Synced_For_Evaluations/VSRD_Proj_And_Render"
+output_dataset_splits_filename_path="/media/zliu/data12/TPAMI_Results/TPAMI_Ablations/Synced_For_Evaluations/VSRD_Proj_And_Render"
+sync_folder_path="/media/zliu/data12/TPAMI_Results/TPAMI_Ablations/Velocity_Project_and_Sil_Loss/Sync_Files/"
 python split_dynamic_static_by_sync_file.py --root_dirname $root_dirname \
                                     --pseudo_labels_dirname $pseudo_labels_dirname \
                                     --output_dataset_path $output_dataset_path \
@@ -68,5 +68,5 @@ python split_dynamic_static_by_sync_file.py --root_dirname $root_dirname \
 
 }
 
-SPLIT_THE_FNAME_BY_SEQUENCE
-# SPLIT_THE_FNAME_BY_DYNAMIC_From_SYNC_FILE
+# SPLIT_THE_FNAME_BY_SEQUENCE
+SPLIT_THE_FNAME_BY_DYNAMIC_From_SYNC_FILE

@@ -33,5 +33,3 @@ python visualization_bev.py --root_folder $ROOT_FOLDER \
 
 
 STAGE_2_VISUALIZATION_BOX3D
-
-# STAGE_2_VISUALIZATION_BEV

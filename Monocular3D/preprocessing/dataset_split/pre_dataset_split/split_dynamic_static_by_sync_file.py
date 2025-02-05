@@ -147,7 +147,7 @@ if __name__=="__main__":
         current_syned_target_label_2 = os.path.join(output_folder_training_label_2_folder_path,os.path.basename(training_sync_target_image_2)).replace(".png",".txt")
         
         if not os.path.exists(current_source_label_2):
-            current_source_label_2 = current_source_label_2.replace("Autolabels_Re_Train","VSRD_Vanilla")
+            current_source_label_2 = current_source_label_2.replace("Velocity_Project_and_Sil_Loss","VSRD_Vanilla")
 
 
 
@@ -226,7 +226,7 @@ if __name__=="__main__":
         current_syned_target_label_2 = os.path.join(output_folder_testing_label_2_folder_path,os.path.basename(training_sync_target_image_2)).replace(".png",".txt")
         
         if not os.path.exists(current_source_label_2):
-            current_source_label_2 = current_source_label_2.replace("Autolabels_Re_Train","VSRD_Vanilla")
+            current_source_label_2 = current_source_label_2.replace("Velocity_Project_and_Sil_Loss","VSRD_Vanilla")
         
         assert os.path.exists(current_source_label_2)
         
