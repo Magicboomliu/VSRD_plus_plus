@@ -61,14 +61,51 @@ import multiprocessing
 from vsrd.distributed.loader import DistributedDataLoader
 
 # Initialization
-from preprocessing.Initial_Attributes.Get_Initial_Attributes import Get_Initial_Attributes
+from preprocessing.Initial_Attributes.Test_Velocity_API import Get_Estimated_Velocity
 import argparse
 
 from torch.utils.data import DataLoader
 
-def main(args):
 
+def before_with_2013_string(string):
+    return string[:string.index("2013")]
+
+
+def biltaral_matching(target_string_lst,source_string_lst):
+
+    shared_string_for_target = []
+    target_string_index = []
+    source_string_index = []
+       
+    for idx, target_string in enumerate(target_string_lst):
+        if target_string in source_string_lst:
+            shared_string_for_target.append(target_string)
+            target_string_index.append(idx)
+            source_string_index.append(source_string_lst.index(target_string))
     
+    return shared_string_for_target,target_string_index,source_string_index
+
+
+def load_pickle(path):
+    with open(path, "rb") as f:
+        loaded_data = pickle.load(f)
+    
+    return loaded_data
+
+
+
+import pickle
+def SAVE_INTO_PICKLE(dict,path):
+    # 将字典保存为 YAML 文件
+    with open(path, "wb") as f:
+        pickle.dump(dict, f)
+
+
+def main(args):
+    
+    
+    
+
     if args.config_path=='00':
         from Optimized_Based.configs.train_config_sequence_00 import _C as my_conf_train
     if args.config_path=='02':
@@ -87,8 +124,9 @@ def main(args):
         from Optimized_Based.configs.train_config_sequence_09 import _C as my_conf_train
     if args.config_path=='10':
         from Optimized_Based.configs.train_config_sequence_10 import _C as my_conf_train
+        
 
-
+    saved_dict_path = os.path.join("estimated_dynamic_{}.pkl".format(args.config_path))
 
     if my_conf_train.TRAIN.DDP.LAUNCHER == "slurm":
         # NOTE: we must specify `MASTER_ADDR` and `MASTER_PORT` by the environment variables
@@ -136,24 +174,7 @@ def main(args):
     source_transforms_min_box_size = my_conf_train.TRAIN.DATASET.SOURCE_TRANSFORMS.MIN_BOX_SIZE
     
     dataset_rectification = my_conf_train.TRAIN.DATASET.RECTIFICATION
-    train_batch_size = my_conf_train.TRAIN.DATASET.BATCH_SIZE # 1 by default
 
-
-    loss_weight_list = {"eikonal_loss":my_conf_train.TRAIN.LOSS_WEIGHT.EIKONAL_LOSS,
-                        "iou_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.IOU_PROJECTION_LOSS,
-                        "l1_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.L1_PROJECTION_LOSS,
-                        "photometric_loss":my_conf_train.TRAIN.LOSS_WEIGHT.PHOTOMETRIC_LOSS,
-                        "radiance_loss":my_conf_train.TRAIN.LOSS_WEIGHT.RADIANCE_LOSS,
-                        "silhouette_loss":my_conf_train.TRAIN.LOSS_WEIGHT.SILHOUETTE_LOSS}
-
-
-    param_group_names = [
-            "detector/locations",
-            "detector/dimensions",
-            "detector/orientations",
-            "detector/embeddings",
-            "hyper_distance_field"
-        ]
 
     target_transforms=[Resizer(image_size=target_transforms_resize_size),
                            MaskAreaFilter(min_mask_area=target_transforms_min_mask_area1),
@@ -207,37 +228,150 @@ def main(args):
     DYNAMIC_TYPE = my_conf_train.TRAIN.DYNAMIC_MODELING_TYPE
     USE_RDF_MODELING_FLAG = my_conf_train.TRAIN.USE_RDF_MODELING
     
-    
     stop_watch.start()
-    for multi_inputs in vsrd.distributed.tqdm(loaders):
+    velocity_dict = dict()
+    
+
+    for multi_inputs in vsrd.distributed.tqdm(loaders):        
+        try:
+            multi_inputs = {
+                relative_index: Dict.apply({
+                    key if re.fullmatch(r".*_\dd", key) else inflection.pluralize(key): value
+                    for key, value in inputs.items()
+                })
+                for relative_index, inputs in multi_inputs.items()}
+            
+            multi_inputs = utils.to(multi_inputs, device=device_id, non_blocking=True)
+            target_inputs = multi_inputs[0] # target inputs
+            # ================================================================
+            # logging
+            image_filename, = target_inputs.filenames    #/media/zliu/data12/dataset/KITTI/VSRD_Format/data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793.png
+            root_dirname = datasets.get_root_dirname(image_filename)  #/media/zliu/data12/dataset/KITTI/VSRD_Format
+            image_dirname = os.path.splitext(os.path.relpath(image_filename, root_dirname))[0] #data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793
+            logger = utils.get_logger(image_dirname)
+
+
+            # Get the ground truth instance_ids and the dynamic labels
+            dynamic_labels_for_target_view = dict()
+            dynamic_labels_for_target_view["instance_ids"] = []
+            dynamic_labels_for_target_view["dynamic_labels"] = []
+            dynamic_raw_contents = read_text_lines(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)
+            
+            
+            for content in dynamic_raw_contents:
+                content = content.strip()
+                current_returned_ids,current_returned_filename,current_return_labels = content.split(" ")
+                
+                if before_with_2013_string(current_returned_filename)!=before_with_2013_string(image_filename):
+                    current_returned_filename = current_returned_filename.replace(before_with_2013_string(current_returned_filename),before_with_2013_string(image_filename))
+
+                if current_returned_filename == image_filename:
+                    dynamic_labels_for_target_view['instance_ids'] = current_returned_ids
+                    dynamic_labels_for_target_view["dynamic_labels"] = current_return_labels
+
+
+            '''Data Alignment with Target Views'''
+            for source_inputs in multi_inputs.values():
+                source_instance_indices = [] 
+                for source_instance_ids, target_instance_ids in zip(source_inputs.instance_ids, target_inputs.instance_ids):
+                    indices = [
+                        source_instance_ids.tolist().index(target_instance_id.item()) 
+                        if target_instance_id in source_instance_ids else -1 
+                        for target_instance_id in target_instance_ids
+                    ]
+                
+                    source_instance_indices.append(source_instance_ids.new_tensor(indices))
+                
+                # instance by instance 
+                source_labels = [
+                    utils.reversed_pad(source_labels, (0, 1))[source_instance_indices, ...]
+                    for source_labels, source_instance_indices
+                    in zip(source_inputs.labels, source_instance_indices)
+                ] 
+                
+                source_boxes_2d = [
+                    utils.reversed_pad(source_boxes_2d, (0, 1))[source_instance_indices, ...]
+                    for source_boxes_2d, source_instance_indices
+                    in zip(source_inputs.boxes_2d, source_instance_indices)
+                ]
+                
+                source_boxes_3d = [
+                    utils.reversed_pad(source_boxes_3d, (0, 1))[source_instance_indices, ...]
+                    for source_boxes_3d, source_instance_indices
+                    in zip(source_inputs.boxes_3d, source_instance_indices)
+                ] 
+                
+                source_hard_masks = [
+                    utils.reversed_pad(source_masks, (0, 1))[source_instance_indices, ...]
+                    for source_masks, source_instance_indices
+                    in zip(source_inputs.hard_masks, source_instance_indices)
+                ]
+
+                source_soft_masks = [
+                    utils.reversed_pad(source_soft_masks, (0, 1))[source_instance_indices, ...]
+                    for source_soft_masks, source_instance_indices
+                    in zip(source_inputs.soft_masks, source_instance_indices)
+                ]
+
+                source_instance_ids = [
+                    utils.reversed_pad(source_instance_ids, (0, 1))[source_instance_indices, ...]
+                    for source_instance_ids, source_instance_indices
+                    in zip(source_inputs.instance_ids, source_instance_indices)
+                ]
+
+                source_visible_masks = [
+                    source_instance_indices.cpu() >= 0
+                    for source_instance_indices in source_instance_indices
+                ] #[tensor([ True,  True,  True,  True, False,  True])]
+
+                source_inputs.update(
+                    labels=source_labels,
+                    boxes_2d=source_boxes_2d,
+                    boxes_3d=source_boxes_3d,
+                    hard_masks=source_hard_masks,
+                    soft_masks=source_soft_masks,
+                    instance_ids=source_instance_ids,
+                    visible_masks=source_visible_masks,
+                )
+                
+
+            dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
+            dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
+            multi_inputs = Get_Estimated_Velocity(multi_inputs=multi_inputs,
+                                                dynamic_mask_list=None,
+                                                device='cuda:0')
+            
+            est_velocity = multi_inputs[0]['velo'].float().contiguous().to(device_id)
+            multi_views_inputs_instance_ids = multi_inputs[0]['instance_ids'][0].tolist()
+            dynamic_gt_instance_list = [int(s) for s in dynamic_labels_for_target_view["instance_ids"].split(",")]
         
-        multi_inputs = {
-            relative_index: Dict.apply({
-                key if re.fullmatch(r".*_\dd", key) else inflection.pluralize(key): value
-                for key, value in inputs.items()
-            })
-            for relative_index, inputs in multi_inputs.items()}
+            
+            shared_string_for_target,target_string_index,source_string_index =biltaral_matching(target_string_lst=multi_views_inputs_instance_ids,
+                            source_string_lst=dynamic_gt_instance_list)
+
+            # here the veloicty should be the [N,3] tensor
+            
+            est_velocity = est_velocity[target_string_index,:].cpu().numpy()
+            dynamic_labels_for_target_view = [dynamic_mask_for_target_view[i] for i in source_string_index]
+            current_fname = multi_inputs[0]['filenames'][0]
+
+            velocity_dict[current_fname] = dict()
+            velocity_dict[current_fname]['est_velo'] = est_velocity
+            velocity_dict[current_fname]['dynamic_gt'] = dynamic_labels_for_target_view
+            velocity_dict[current_fname]['instance_name'] = shared_string_for_target
+
+        except:
+            pass
         
-        multi_inputs = utils.to(multi_inputs, device=device_id, non_blocking=True)
-        target_inputs = multi_inputs[0] # target inputs
-        # ================================================================
-        # logging
-        image_filename, = target_inputs.filenames    #/media/zliu/data12/dataset/KITTI/VSRD_Format/data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793.png
-        root_dirname = datasets.get_root_dirname(image_filename)  #/media/zliu/data12/dataset/KITTI/VSRD_Format
-        image_dirname = os.path.splitext(os.path.relpath(image_filename, root_dirname))[0] #data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793
-        logger = utils.get_logger(image_dirname)
 
+        
 
-        # dyanmic labels for targhet views
-        dynamic_labels_for_target_view = dict()
-        dynamic_labels_for_target_view["instance_ids"] = []
-        dynamic_labels_for_target_view["dynamic_labels"] = []
-    
+    SAVE_INTO_PICKLE(dict=velocity_dict,
+                     path=saved_dict_path)
     
     
 
-
-
+    
 
 def parse_args():
     parser = argparse.ArgumentParser(description="SceneFlow-Multi-Baseline Images")

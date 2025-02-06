@@ -116,7 +116,7 @@ def get_velocity_from_multi_inputs(instance_accumulate_tuple_list,multi_inputs,s
 def Get_Estimated_Velocity_Using_CPI(multi_inputs,dynamic_mask=None,device=None):
 
     '''Get Estimated Velocity'''
-    target_instance_ids = multi_inputs[0]['instance_ids'][0].cpu().numpy().tolist()
+    target_instance_ids = multi_inputs[0]['instance_ids'][0].cpu().numpy().tolist() # get all the ionstance id
     
     # Accumulated Valid Velocity
     accmulate_valid_speed_dict = dict()
