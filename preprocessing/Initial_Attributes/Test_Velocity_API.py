@@ -32,7 +32,7 @@ def Get_Estimated_Velocity(multi_inputs,dynamic_mask_list,device="cuda:0"):
     multi_inputs = Update_Multi_Inputs(multi_inputs)
 
     # Step 1: Get the RoI Lidar Points
-    for keys in tqdm(multi_inputs.keys()):
+    for keys in multi_inputs.keys():
         ROI_LiDAR_Dict,projected_mask = Get_Pseudo_Roi_LiDAR(data_inputs=multi_inputs[keys],target_frame_instance_ids=multi_inputs[0]['instance_ids'][0].cpu().numpy().tolist(),
                             threeD_visualization=False)
         

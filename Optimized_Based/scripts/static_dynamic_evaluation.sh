@@ -1,7 +1,6 @@
 STATIC_DYNAMIC_EVALUATION(){
 cd ..
 
-
 CUDA_VISIBLE_DEVICES=0 torchrun \
     --rdzv_backend c10d \
     --rdzv_endpoint localhost:22500 \
