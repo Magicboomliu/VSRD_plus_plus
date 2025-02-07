@@ -125,6 +125,12 @@ def main(args):
     if args.config_path=='10':
         from Optimized_Based.configs.train_config_sequence_10 import _C as my_conf_train
         
+    # output velocities folder path
+    
+    saved_estimated_velocities_folder_path = my_conf_train.OUTPUT_ESTIMATED_VELOCITY_FOLDER
+    os.makedirs(saved_estimated_velocities_folder_path,exist_ok=True)
+
+        
 
     saved_dict_path = os.path.join("estimated_dynamic_{}.pkl".format(args.config_path))
 
@@ -226,137 +232,159 @@ def main(args):
 
     stop_watch.start()
     velocity_dict = dict()
-    
 
-    for multi_inputs in vsrd.distributed.tqdm(loaders):        
-
-        multi_inputs = {
-            relative_index: Dict.apply({
-                key if re.fullmatch(r".*_\dd", key) else inflection.pluralize(key): value
-                for key, value in inputs.items()
-            })
-            for relative_index, inputs in multi_inputs.items()}
+    for multi_inputs in vsrd.distributed.tqdm(loaders):
         
-        multi_inputs = utils.to(multi_inputs, device=device_id, non_blocking=True)
-        target_inputs = multi_inputs[0] # target inputs
-        # ================================================================
-        # logging
-        image_filename, = target_inputs.filenames    #/media/zliu/data12/dataset/KITTI/VSRD_Format/data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793.png
-        root_dirname = datasets.get_root_dirname(image_filename)  #/media/zliu/data12/dataset/KITTI/VSRD_Format
-        image_dirname = os.path.splitext(os.path.relpath(image_filename, root_dirname))[0] #data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793
-        logger = utils.get_logger(image_dirname)
+                
 
-
-        # Get the ground truth instance_ids and the dynamic labels
-        dynamic_labels_for_target_view = dict()
-        dynamic_labels_for_target_view["instance_ids"] = []
-        dynamic_labels_for_target_view["dynamic_labels"] = []
-        dynamic_raw_contents = read_text_lines(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)
-        
-        
-        for content in dynamic_raw_contents:
-            content = content.strip()
-            current_returned_ids,current_returned_filename,current_return_labels = content.split(" ")
+        try:
+            multi_inputs = {
+                relative_index: Dict.apply({
+                    key if re.fullmatch(r".*_\dd", key) else inflection.pluralize(key): value
+                    for key, value in inputs.items()
+                })
+                for relative_index, inputs in multi_inputs.items()}
             
-            if before_with_2013_string(current_returned_filename)!=before_with_2013_string(image_filename):
-                current_returned_filename = current_returned_filename.replace(before_with_2013_string(current_returned_filename),before_with_2013_string(image_filename))
+            multi_inputs = utils.to(multi_inputs, device=device_id, non_blocking=True)
+            target_inputs = multi_inputs[0] # target inputs
+            # ================================================================
+            # logging
+            image_filename, = target_inputs.filenames    #/media/zliu/data12/dataset/KITTI/VSRD_Format/data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793.png
+            root_dirname = datasets.get_root_dirname(image_filename)  #/media/zliu/data12/dataset/KITTI/VSRD_Format
+            image_dirname = os.path.splitext(os.path.relpath(image_filename, root_dirname))[0] #data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793
+            logger = utils.get_logger(image_dirname)
+            
+            
+            saved_specified_velocity_path = os.path.join(saved_estimated_velocities_folder_path,image_dirname+".pkl")
 
-            if current_returned_filename == image_filename:
-                dynamic_labels_for_target_view['instance_ids'] = current_returned_ids
-                dynamic_labels_for_target_view["dynamic_labels"] = current_return_labels
+            if not os.path.exists(os.path.dirname(saved_specified_velocity_path)):
+                os.makedirs(os.path.dirname(saved_specified_velocity_path),exist_ok=True)
+
+            
 
 
-        '''Data Alignment with Target Views'''
-        for source_inputs in multi_inputs.values():
-            source_instance_indices = [] 
-            for source_instance_ids, target_instance_ids in zip(source_inputs.instance_ids, target_inputs.instance_ids):
-                indices = [
-                    source_instance_ids.tolist().index(target_instance_id.item()) 
-                    if target_instance_id in source_instance_ids else -1 
-                    for target_instance_id in target_instance_ids
+            # Get the ground truth instance_ids and the dynamic labels
+            dynamic_labels_for_target_view = dict()
+            dynamic_labels_for_target_view["instance_ids"] = []
+            dynamic_labels_for_target_view["dynamic_labels"] = []
+            dynamic_raw_contents = read_text_lines(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)
+            
+            
+            for content in dynamic_raw_contents:
+                content = content.strip()
+                current_returned_ids,current_returned_filename,current_return_labels = content.split(" ")
+                
+                if before_with_2013_string(current_returned_filename)!=before_with_2013_string(image_filename):
+                    current_returned_filename = current_returned_filename.replace(before_with_2013_string(current_returned_filename),before_with_2013_string(image_filename))
+
+                if current_returned_filename == image_filename:
+                    dynamic_labels_for_target_view['instance_ids'] = current_returned_ids
+                    dynamic_labels_for_target_view["dynamic_labels"] = current_return_labels
+
+
+            '''Data Alignment with Target Views'''
+            for source_inputs in multi_inputs.values():
+                source_instance_indices = [] 
+                for source_instance_ids, target_instance_ids in zip(source_inputs.instance_ids, target_inputs.instance_ids):
+                    indices = [
+                        source_instance_ids.tolist().index(target_instance_id.item()) 
+                        if target_instance_id in source_instance_ids else -1 
+                        for target_instance_id in target_instance_ids
+                    ]
+                
+                    source_instance_indices.append(source_instance_ids.new_tensor(indices))
+                
+                # instance by instance 
+                source_labels = [
+                    utils.reversed_pad(source_labels, (0, 1))[source_instance_indices, ...]
+                    for source_labels, source_instance_indices
+                    in zip(source_inputs.labels, source_instance_indices)
+                ] 
+                
+                source_boxes_2d = [
+                    utils.reversed_pad(source_boxes_2d, (0, 1))[source_instance_indices, ...]
+                    for source_boxes_2d, source_instance_indices
+                    in zip(source_inputs.boxes_2d, source_instance_indices)
                 ]
-            
-                source_instance_indices.append(source_instance_ids.new_tensor(indices))
-            
-            # instance by instance 
-            source_labels = [
-                utils.reversed_pad(source_labels, (0, 1))[source_instance_indices, ...]
-                for source_labels, source_instance_indices
-                in zip(source_inputs.labels, source_instance_indices)
-            ] 
-            
-            source_boxes_2d = [
-                utils.reversed_pad(source_boxes_2d, (0, 1))[source_instance_indices, ...]
-                for source_boxes_2d, source_instance_indices
-                in zip(source_inputs.boxes_2d, source_instance_indices)
-            ]
-            
-            source_boxes_3d = [
-                utils.reversed_pad(source_boxes_3d, (0, 1))[source_instance_indices, ...]
-                for source_boxes_3d, source_instance_indices
-                in zip(source_inputs.boxes_3d, source_instance_indices)
-            ] 
-            
-            source_hard_masks = [
-                utils.reversed_pad(source_masks, (0, 1))[source_instance_indices, ...]
-                for source_masks, source_instance_indices
-                in zip(source_inputs.hard_masks, source_instance_indices)
-            ]
+                
+                source_boxes_3d = [
+                    utils.reversed_pad(source_boxes_3d, (0, 1))[source_instance_indices, ...]
+                    for source_boxes_3d, source_instance_indices
+                    in zip(source_inputs.boxes_3d, source_instance_indices)
+                ] 
+                
+                source_hard_masks = [
+                    utils.reversed_pad(source_masks, (0, 1))[source_instance_indices, ...]
+                    for source_masks, source_instance_indices
+                    in zip(source_inputs.hard_masks, source_instance_indices)
+                ]
 
-            source_soft_masks = [
-                utils.reversed_pad(source_soft_masks, (0, 1))[source_instance_indices, ...]
-                for source_soft_masks, source_instance_indices
-                in zip(source_inputs.soft_masks, source_instance_indices)
-            ]
+                source_soft_masks = [
+                    utils.reversed_pad(source_soft_masks, (0, 1))[source_instance_indices, ...]
+                    for source_soft_masks, source_instance_indices
+                    in zip(source_inputs.soft_masks, source_instance_indices)
+                ]
 
-            source_instance_ids = [
-                utils.reversed_pad(source_instance_ids, (0, 1))[source_instance_indices, ...]
-                for source_instance_ids, source_instance_indices
-                in zip(source_inputs.instance_ids, source_instance_indices)
-            ]
+                source_instance_ids = [
+                    utils.reversed_pad(source_instance_ids, (0, 1))[source_instance_indices, ...]
+                    for source_instance_ids, source_instance_indices
+                    in zip(source_inputs.instance_ids, source_instance_indices)
+                ]
 
-            source_visible_masks = [
-                source_instance_indices.cpu() >= 0
-                for source_instance_indices in source_instance_indices
-            ] #[tensor([ True,  True,  True,  True, False,  True])]
+                source_visible_masks = [
+                    source_instance_indices.cpu() >= 0
+                    for source_instance_indices in source_instance_indices
+                ] #[tensor([ True,  True,  True,  True, False,  True])]
 
-            source_inputs.update(
-                labels=source_labels,
-                boxes_2d=source_boxes_2d,
-                boxes_3d=source_boxes_3d,
-                hard_masks=source_hard_masks,
-                soft_masks=source_soft_masks,
-                instance_ids=source_instance_ids,
-                visible_masks=source_visible_masks,
-            )
+                source_inputs.update(
+                    labels=source_labels,
+                    boxes_2d=source_boxes_2d,
+                    boxes_3d=source_boxes_3d,
+                    hard_masks=source_hard_masks,
+                    soft_masks=source_soft_masks,
+                    instance_ids=source_instance_ids,
+                    visible_masks=source_visible_masks,
+                )
+                
+
+            dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
+            dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
+            multi_inputs = Get_Estimated_Velocity(multi_inputs=multi_inputs,
+                                                dynamic_mask_list=None,
+                                                device='cuda:0')
             
-
-        dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
-        dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
-        multi_inputs = Get_Estimated_Velocity(multi_inputs=multi_inputs,
-                                            dynamic_mask_list=None,
-                                            device='cuda:0')
+            est_velocity = multi_inputs[0]['velo'].float().contiguous().to(device_id)
+            multi_views_inputs_instance_ids = multi_inputs[0]['instance_ids'][0].tolist()
+            dynamic_gt_instance_list = [int(s) for s in dynamic_labels_for_target_view["instance_ids"].split(",")]
         
-        est_velocity = multi_inputs[0]['velo'].float().contiguous().to(device_id)
-        multi_views_inputs_instance_ids = multi_inputs[0]['instance_ids'][0].tolist()
-        dynamic_gt_instance_list = [int(s) for s in dynamic_labels_for_target_view["instance_ids"].split(",")]
-    
-        
-        shared_string_for_target,target_string_index,source_string_index =biltaral_matching(target_string_lst=multi_views_inputs_instance_ids,
-                        source_string_lst=dynamic_gt_instance_list)
+            
+            shared_string_for_target,target_string_index,source_string_index =biltaral_matching(target_string_lst=multi_views_inputs_instance_ids,
+                            source_string_lst=dynamic_gt_instance_list)
 
-        # here the veloicty should be the [N,3] tensor
-        
-        est_velocity = est_velocity[target_string_index,:].cpu().numpy()
-        dynamic_labels_for_target_view = [dynamic_mask_for_target_view[i] for i in source_string_index]
-        current_fname = multi_inputs[0]['filenames'][0]
+            # here the veloicty should be the [N,3] tensor
+            
+            est_velocity = est_velocity[target_string_index,:].cpu().numpy()
+            dynamic_labels_for_target_view = [dynamic_mask_for_target_view[i] for i in source_string_index]
+            current_fname = multi_inputs[0]['filenames'][0]
 
-        velocity_dict[current_fname] = dict()
-        velocity_dict[current_fname]['est_velo'] = est_velocity
-        velocity_dict[current_fname]['dynamic_gt'] = dynamic_labels_for_target_view
-        velocity_dict[current_fname]['instance_name'] = shared_string_for_target
-        
+            velocity_dict[current_fname] = dict()
+            velocity_dict[current_fname]['est_velo'] = est_velocity
+            velocity_dict[current_fname]['dynamic_gt'] = dynamic_labels_for_target_view
+            velocity_dict[current_fname]['instance_name'] = shared_string_for_target
+            
+            single_current_dict = dict()
+            single_current_dict['fname'] = current_fname
+            single_current_dict['est_velo'] = est_velocity
+            single_current_dict['dynamic_gt'] = dynamic_labels_for_target_view
+            single_current_dict['instance_name'] = shared_string_for_target
+            
 
+            if not os.path.exists(saved_specified_velocity_path):
+                print(saved_specified_velocity_path)
+                SAVE_INTO_PICKLE(single_current_dict,saved_specified_velocity_path)
+        
+        except:
+            pass
 
         
 

@@ -91,3 +91,5 @@ _C.TRAIN.DYNAMIC_LABELS_PATH="/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/est_dynamic_l
 
 # selective from 'mlp', 'vector_velocity','scalar_velocity'
 _C.TRAIN.DYNAMIC_MODELING_TYPE='vector_velocity'
+
+_C.OUTPUT_ESTIMATED_VELOCITY_FOLDER="/media/zliu/data12/TPAMI_Results/Estimated_Velocities/"
