@@ -241,6 +241,9 @@ def hierarchical_volumetric_rendering(
 
 
         sampled_signed_distances, *multi_sampled_features = distance_field(sampled_positions) # get sdf and surface normals
+        
+
+        
         sampled_gradients, = torch.autograd.grad(
             outputs=sampled_signed_distances,
             inputs=sampled_positions,

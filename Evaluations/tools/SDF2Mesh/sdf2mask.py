@@ -20,8 +20,6 @@ import inflection
 import torch.utils.tensorboard
 import sys
 
-import trimesh
-
 import vsrd.datasets
 sys.path.append("..")
 
@@ -70,111 +68,6 @@ import vsrd.distributed
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
-
-from get_mesh import generate_mesh_from_sdf_network
-
-def quadrature_sampler(bins, deterministic=False):
-    weights = 0.5 if deterministic else torch.rand_like(bins[..., :-1])
-    samples = torch.lerp(bins[..., :-1], bins[..., 1:], weights)
-    return samples
-
-
-def inverse_transform_sampler(bins, weights, num_samples, deterministic=False):
-
-    pdf = nn.functional.normalize(weights, p=1, dim=-1)
-    cdf = torch.cumsum(pdf, dim=-1)
-    cdf = nn.functional.pad(cdf, (1, 0))
-
-    if deterministic:
-        uniform = torch.linspace(0.0, 1.0, num_samples, device=cdf.device)
-        uniform = uniform.expand(*cdf.shape[:-1], -1)
-    else:
-        uniform = torch.rand(*cdf.shape[:-1], num_samples, device=cdf.device)
-        uniform = torch.sort(uniform, dim=-1, descending=False).values
-
-    indices = torch.searchsorted(cdf, uniform, right=False)
-    indices = torch.clamp(indices, min=1, max=cdf.shape[-1] - 1)
-
-    min_cdf = torch.gather(cdf, index=indices - 1, dim=-1)
-    max_cdf = torch.gather(cdf, index=indices, dim=-1)
-
-    min_bins = torch.gather(bins, index=indices - 1, dim=-1)
-    max_bins = torch.gather(bins, index=indices, dim=-1)
-
-    weights = (uniform - min_cdf) / (max_cdf - min_cdf + 1e-6)
-    samples = torch.lerp(min_bins, max_bins, weights)
-
-    return samples
-
-
-
-def hierarchical_volumetric_rendering(
-    distance_field,
-    ray_positions,
-    ray_directions,
-    distance_range,
-    num_samples,
-    sdf_std_deviation,
-    cosine_ratio=1.0,
-    epsilon=1e-6,
-    sampled_distances=None,
-    sampled_weights=None,
-):
-    '''
-    distance field: SDF generator 
-    ray_position: [1000,3]
-    ray_direction: [1000,3]
-    distance_range : [0,100]
-    sdf_std_deviation: 1.0
-    
-    
-    '''
-    
-
-    
-    
-    # corase sampling
-    if sampled_distances is None:
-        distance_bins = torch.linspace(*distance_range, num_samples + 1, device=ray_directions.device) #[101]
-
-        distance_bins = distance_bins.expand(*ray_directions.shape[:-1], 1, -1) #[1000,1,101]
-        
-        # quadrature_sampler 函数在每一对连续的区间端点之间生成采样点。这些采样点可以是确定的中间点，也可以是随机点。
-        sampled_distances = quadrature_sampler(distance_bins) #[1000,1,100]
-
-    # fine sampling
-    else:
-        sampled_distances = sampled_distances.permute(*range(1, sampled_distances.ndim), 0)
-        sampled_weights = sampled_weights.permute(*range(1, sampled_weights.ndim), 0)
-
-        sampled_distances = torch.cat([
-            sampled_distances,
-            inverse_transform_sampler(
-                bins=sampled_distances,
-                weights=sampled_weights,
-                num_samples=num_samples,
-            ),
-        ], dim=-1)
-
-        sampled_distances = torch.sort(sampled_distances, dim=-1, descending=False).values
-
-    # 的意思是将最后一个维度（-1）移到最前面，其余维度依次后移。[100, 1000, 1]
-     
-    sampled_distances = sampled_distances.permute(-1, *range(sampled_distances.ndim - 1)) # Size([100, 1000, 1]) 
-    sampled_intervals = sampled_distances[1:, ...] - sampled_distances[:-1, ...] # sample point intervals # size(99,1000,1)
-    sampled_midpoints = (sampled_distances[:-1, ...] + sampled_distances[1:, ...]) / 2.0 # sample mid points # size(99,1000,1)
-
-    sampled_positions = ray_positions + ray_directions * sampled_midpoints # all the smaple points direction # Size([99, 1000, 3]) 
-       
-    create_graph = torch.is_grad_enabled()
-    
-
-    with torch.enable_grad():
-        sampled_positions.requires_grad_(True)
-        sampled_signed_distances, *multi_sampled_features = distance_field(sampled_positions) # get sdf and surface normals
-
-
-    return sampled_signed_distances
 
 
 def decode_box_3d(locations, dimensions, orientations,residual=None):
@@ -860,18 +753,166 @@ def Extract_Mesh_From_VSRDPP(args):
                         # 将处理后的软距离场添加到场景列表中
                         soft_distance_fields.append(soft_distance_field)
 
-            
-            
+            #----------------------------------------------------------------------------------------------------------------#
+            #-------------------------------- Projected 3D BOXES ------------------------------------------------#
+            #----------------------------------------------------------------------------------------------------------------#
+            current_idx = 0
+            for relative_index, inputs in multi_inputs.items():
+                # Learn the Box Residual 
+                if USE_RDF_MODELING_FLAG:
+                    # Get the current residual.
+                    if USE_DYNAMIC_MODELING_FLAG:
+                        current_location_residual = relative_box_residual[:,:,current_idx,:] #(B,nums_of_instances,3)
+                    else:
+                        # They are all Zeros for Vanallia VSRD
+                        current_batch_size = world_boxes_3d.shape[0]
+                        current_instance_numbers = world_boxes_3d.shape[1]
+                        current_location_residual = torch.zeros((current_batch_size,current_instance_numbers,3)).to(world_boxes_3d.device)
+                    
+                    # Using Dynamic Model Flg
+                    if USE_DYNAMIC_MODELING_FLAG:
+                        if USE_DYNAMIC_MASK_FLAG:                                
+                            dynamic_mask_for_target_view_for_output_tensor = torch.from_numpy(np.array(dynamic_mask_for_target_view_for_output)).unsqueeze(0).unsqueeze(-1).to(current_location_residual.device).float()
+                            current_location_residual = current_location_residual * dynamic_mask_for_target_view_for_output_tensor
+                    
+                    current_world_boxes_3d = decode_box_3d(locations=world_outputs.locations,
+                                    dimensions=world_outputs.dimensions,
+                                    orientations=world_outputs.orientations,
+                                    residual = current_location_residual)
+                    current_world_boxes_3d = nn.functional.pad(current_world_boxes_3d, (0, 1), mode="constant", value=1.0) #(1,4,8,4)
+                
+                else:
+                    # without the world boxes 3d
+                    current_world_boxes_3d = world_boxes_3d
 
-            for frame_index,(relative_index, inputs) in enumerate(multi_inputs.items()):
-                distance_field=soft_distance_fields[frame_index]
-                verts, faces = generate_mesh_from_sdf_network(distance_field)
-                mesh = trimesh.Trimesh(vertices=verts, faces=faces)
-                mesh.export("output_mesh_frame_{}.ply".format(frame_index))
-            
-            quit()
+                    
+                # different idx for diferent instances
+                current_idx = current_idx + 1
+                # from world to camera coordinate at the target frames.
+                camera_boxes_3d = torch.einsum("bmn,b...n->b...m", inputs.extrinsic_matrices, current_world_boxes_3d)
+                camera_boxes_3d = camera_boxes_3d[..., :-1] / camera_boxes_3d[..., -1:] #(1,4,8,3)---> at source view camera coordinate
+
+                
+                # project the 3D bounding boxex from camera coordinate to image coordinate at current source vies
+                camera_boxes_2d = torch.stack([
+                    torch.stack([
+                        project_box_3d(
+                            box_3d=camera_box_3d,
+                            line_indices=LINE_INDICES,
+                            intrinsic_matrix=intrinsic_matrix,
+                        )
+                        for camera_box_3d in camera_boxes_3d
+                    ], dim=0)
+                    for camera_boxes_3d, intrinsic_matrix
+                    in zip(camera_boxes_3d, inputs.intrinsic_matrices)
+                ], dim=0) #(1,4,2,2)
+                
+                # make sure inside the image
+                camera_boxes_2d = torchvision.ops.clip_boxes_to_image(
+                    boxes=camera_boxes_2d.flatten(-2, -1),
+                    size=inputs.images.shape[-2:],
+                ).unflatten(-1, (2, 2))  #(1,4,2,2)
+                
+                # saved the camera_box_3d and camera_box_2d in all source views
+                multi_outputs[relative_index].update(
+                    boxes_3d=camera_boxes_3d,
+                    boxes_2d=camera_boxes_2d)
+
+
+            '''....................Volume Rendering..........................'''
+            for frame_index, ((relative_index, inputs), (relative_index, outputs)) in tqdm(enumerate(zip(multi_inputs.items(), multi_outputs.items()))):
+                
+                basename_filename = after_with_2013_string(inputs['filenames'][0])
+                image_frame_idx = os.path.basename(basename_filename)[:-4]
+                
+                # FIXME ME
+                updated_image_frame_idx = changed_current_filename(string=image_frame_idx,
+                                         relative_index=relative_index)
+                current_basename_filename = os.path.join(os.path.dirname(inputs['filenames'][0]),flag,updated_image_frame_idx+".png")
+                current_basename_filename = after_with_2013_string(current_basename_filename)
+                saved_image_filename = os.path.join(args.output_folder,current_basename_filename)
+                saved_image_dirname = os.path.dirname(saved_image_filename)
+                
+                os.makedirs(saved_image_dirname,exist_ok=True)
+ 
+                
+                # 存储结果的列表
+                volume_masks_list = []
+                # 遍历 zip 中的元素，并调用 hierarchical_wrapper 函数
+                for camera_position, ray_directions_set in zip(inputs.camera_positions, 
+                                                            inputs.ray_directions):
+                    ray_directions_list = []
+                    for ray_directions in ray_directions_set:
+                        # 调用 hierarchical_wrapper 函数并传递参数，取第一个返回值
+                        mask = hierarchical_wrapper(rendering.hierarchical_volumetric_rendering)(
+                            distance_field=soft_distance_fields[frame_index],
+                            ray_positions=camera_position,
+                            ray_directions=ray_directions,
+                            distance_range=[0, 100.0],
+                            num_samples=100,
+                            sdf_std_deviation=sdf_std_deviation,
+                            cosine_ratio=cosine_ratio,
+                        )[0]
+                        ray_directions_list.append(mask)
+
+                    # 将内部列表堆叠并 permute
+                    stacked_ray_directions = torch.stack(ray_directions_list, dim=0).permute(2, 0, 1)
+                    volume_masks_list.append(stacked_ray_directions)
+                # 将外部列表堆叠起来
+                volume_masks = torch.stack(volume_masks_list, dim=0)
+
+
+                surface_masks = torch.stack([
+                    rendering.sphere_tracing(
+                        distance_field=utils.compose(soft_distance_fields[frame_index], operator.itemgetter(0)),
+                        ray_positions=camera_position,
+                        ray_directions=ray_directions,
+                        num_iterations=my_conf_train.EVAL.SURFACE_RENDERING.NUM_ITERATIONS,
+                        convergence_criteria=my_conf_train.EVAL.SURFACE_RENDERING.convergence_criteria,
+                        bounding_radius=my_conf_train.EVAL.SURFACE_RENDERING.BOUNDING_RADIUS,
+                        initialization=False,
+                        differentiable=False,
+                    )[1].permute(2, 0, 1)
+                    for soft_distance_field, camera_position, ray_directions
+                    in zip(soft_distance_fields, inputs.camera_positions, inputs.ray_directions)
+                ], dim=0)
                 
 
+                pd_masks = volume_masks * surface_masks
+
+                # Draw Estiamted Predicted Images
+                pd_images_list = []
+                for (image,pd_masks,pd_boxes_3d,intrinsic_matrix) in zip(inputs.images,pd_masks,outputs.boxes_3d,inputs.intrinsic_matrices):
+                    
+                    image_with_masks = visualization.draw_masks(image, pd_masks)
+                    # 绘制 3D 边框
+                    
+                    if WITHOUT_BOX_FLAG:
+                        image_with_boxes = image_with_masks
+                    else:
+                        image_with_boxes = visualization.draw_boxes_3d(
+                            image=image_with_masks,
+                            boxes_3d=pd_boxes_3d,
+                            line_indices=LINE_INDICES + [[0, 5], [1, 4]],
+                            intrinsic_matrix=intrinsic_matrix,
+                            color=(0, 255, 0),
+                            thickness=2,
+                            lineType=cv.LINE_AA)
+                    
+                    pd_images_list.append(image_with_boxes)
+
+                # 将所有处理后的图像堆叠成一个张量
+                pd_images = torch.stack(pd_images_list, dim=0)
+                
+                
+                # saved_estimated_projected_3d
+                saved_pd_projected_3d_path = saved_image_filename          
+                skimage.io.imsave(saved_pd_projected_3d_path,(pd_images.squeeze(0).permute(1,2,0).cpu().numpy()*255).astype(np.uint8))
+                
+                
+        index = index +1
+        if index>20:
+            break
 
 if __name__=="__main__":
     
@@ -900,5 +941,3 @@ if __name__=="__main__":
     
 
     Extract_Mesh_From_VSRDPP(args=args)
-            
-            
