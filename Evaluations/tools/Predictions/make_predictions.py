@@ -63,7 +63,7 @@ import vsrd
 import argparse
 import glob
 import multiprocessing
-
+import vsrd.distributed
 import scipy as sp
 import pycocotools.mask
 
@@ -118,6 +118,7 @@ def main(args):
             ), dynamic_seqences):
 
                 progress_bar.update(1)
+
 
 def make_predictions(
     sequence,
@@ -1157,6 +1158,8 @@ def calculate_framewise_dynamic_mask(N, target_frame_dynamic_list, target_frame_
       B_Mask[B_index] = Bool_value
       
     return B_Mask
+
+
 
     
 if __name__=="__main__":

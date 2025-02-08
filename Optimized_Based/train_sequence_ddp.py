@@ -446,6 +446,10 @@ def main(args=None):
                     visible_masks=source_visible_masks,
                 )
                 
+                
+                
+                
+                
             # Read the Dynamic Masks
             if USE_DYNAMIC_MODELING_FLAG:
                 if USE_DYNAMIC_MASK_FLAG:
