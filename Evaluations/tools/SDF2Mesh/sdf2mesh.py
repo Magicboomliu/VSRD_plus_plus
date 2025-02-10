@@ -330,17 +330,10 @@ def Extract_Mesh_From_VSRDPP(args):
     
 
     if USE_RDF_MODELING_FLAG:
-        if not WITHOUT_BOX_FLAG:
-            flag = 'With_RDF/With3DBOX'
-        else:
-            flag = 'With_RDF/Without_3DBOX'
+        flag = 'With_RDF'
     else:
-        if not WITHOUT_BOX_FLAG:
-            flag = 'Without_RDF/With3DBOX' 
-        else:
-            flag = 'Without_RDF/Without_3DBOX'
-    
-    
+        flag = 'Without_RDF' 
+
 
     target_transforms=[Resizer(image_size=target_transforms_resize_size),
                            MaskAreaFilter(min_mask_area=target_transforms_min_mask_area1),
@@ -384,16 +377,13 @@ def Extract_Mesh_From_VSRDPP(args):
     global_step = int((args.ckpt_filename)[5:-3])
 
     
-    
     index = 0
-    
     
     for multi_inputs in tqdm(loaders):
 
         #----------------------------------------------------------------------------------------------------------------#
-        #-------------------------------- Loading the Data ------------------------------------------------#
+            #-------------------------------- Loading the Data ----------------------------------------------------------#
         #----------------------------------------------------------------------------------------------------------------#
-        
         multi_inputs = {
             relative_index: Dict.apply({
                 key if re.fullmatch(r".*_\dd", key) else inflection.pluralize(key): value
@@ -410,7 +400,6 @@ def Extract_Mesh_From_VSRDPP(args):
         image_dirname = os.path.splitext(os.path.relpath(image_filename, root_dirname))[0] #data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793
         logger = utils.get_logger(image_dirname)
         
-
 
         #----------------------------------------------------------------------------------------------------------------#
         #-------------------------------- Loading the Dynamic Labels ------------------------------------------------#
@@ -437,6 +426,8 @@ def Extract_Mesh_From_VSRDPP(args):
 
         dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
         dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
+        
+        
         
 
         #----------------------------------------------------------------------------------------------------------------#
@@ -575,6 +566,18 @@ def Extract_Mesh_From_VSRDPP(args):
         device = multi_images[0].device
         nums_of_instance_number = multi_hard_masks[0].shape[-1]
 
+        # save images
+        current_scene_name = multi_inputs[0]['filenames'][0]
+        basename_filename = after_with_2013_string(current_scene_name)
+        updated_image_frame_idx = basename_filename
+        current_basename_filename = os.path.join(os.path.dirname(current_scene_name),flag,updated_image_frame_idx+".png")
+        current_basename_filename = after_with_2013_string(current_basename_filename)
+        saved_image_filename = os.path.join(args.output_folder,current_basename_filename)
+        saved_image_dirname = os.path.dirname(saved_image_filename)
+        os.makedirs(saved_image_dirname,exist_ok=True)
+
+
+
         # ----------------------------------------------------------------
         # instance loss
         cosine_annealing = lambda x, a, b: (np.cos(np.pi * x) + 1.0) / 2.0 * (a - b) + b
@@ -682,13 +685,13 @@ def Extract_Mesh_From_VSRDPP(args):
 
             return wrapper
 
+
         with torch.no_grad():                
             #['boxes_3d', 'locations', 'dimensions', 'orientations', 'embeddings'] 
             world_outputs = utils.Dict.apply(models.detector())
             multi_outputs = utils.DefaultDict(utils.Dict)
             # This is the shared base 3D Bounding Boxes
             world_boxes_3d = nn.functional.pad(world_outputs.boxes_3d, (0, 1), mode="constant", value=1.0) # (1,num_of_instances,8,4)
-            
             relative_index_list = [relative_index for relative_index in multi_inputs.keys()]
 
             if USE_DYNAMIC_MASK_FLAG:
@@ -861,16 +864,21 @@ def Extract_Mesh_From_VSRDPP(args):
                         soft_distance_fields.append(soft_distance_field)
 
             
-            
-
             for frame_index,(relative_index, inputs) in enumerate(multi_inputs.items()):
+                
+                basename_filename = after_with_2013_string(inputs['filenames'][0])
+                image_frame_idx = os.path.basename(basename_filename)[:-4]
+                
+                # FIXME ME
+                updated_image_frame_idx = changed_current_filename(string=image_frame_idx,
+                                         relative_index=relative_index)
+                            
                 distance_field=soft_distance_fields[frame_index]
                 verts, faces = generate_mesh_from_sdf_network(distance_field)
                 mesh = trimesh.Trimesh(vertices=verts, faces=faces)
-                mesh.export("output_mesh_frame_{}.ply".format(frame_index))
-            
-            quit()
-                
+                mesh.export("{}/{}.ply".format(saved_image_dirname,updated_image_frame_idx))
+
+
 
 
 if __name__=="__main__":

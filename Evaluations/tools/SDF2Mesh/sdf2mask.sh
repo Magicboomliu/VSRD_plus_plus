@@ -2,7 +2,7 @@ SDF2MASK(){
 root_dirname="/media/zliu/data12/dataset/VSRD_PP_Sync/"
 ckpt_dirname="/media/zliu/data12/dataset/TPAMI_Saved_Ckpts/VSRDPP_saved_ckpts/ckpts/"
 ckpt_filename="step_2499.pt"
-output_folder="/media/zliu/data12/TPAMI_Results/SDF_Visualizations/"
+output_folder="/media/zliu/data12/TPAMI_Results/SDF_Visualizations"
 
 
 
