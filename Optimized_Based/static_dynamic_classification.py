@@ -67,6 +67,8 @@ import argparse
 from torch.utils.data import DataLoader
 
 
+
+
 def before_with_2013_string(string):
     return string[:string.index("2013")]
 
@@ -124,9 +126,10 @@ def main(args):
         from Optimized_Based.configs.train_config_sequence_09 import _C as my_conf_train
     if args.config_path=='10':
         from Optimized_Based.configs.train_config_sequence_10 import _C as my_conf_train
+    if args.config_path=='missed':
+        from Optimized_Based.configs.train_config_sequence_missed import _C as my_conf_train
         
     # output velocities folder path
-    
     saved_estimated_velocities_folder_path = my_conf_train.OUTPUT_ESTIMATED_VELOCITY_FOLDER
     os.makedirs(saved_estimated_velocities_folder_path,exist_ok=True)
 
