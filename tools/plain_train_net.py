@@ -15,11 +15,14 @@ sys.path.append(ROOT_DIR)
 from config_train import cfg_vsrd_24_splits_vsrd 
 from config_train import cfg_vsrd_24_splits_vsrd_pp
 from config_train import cfg_vsrd_24_splits_autolabels
+from config_train import cfg_vsrd_24_splits_gt
+
 
 # casual splits
 from config_train import cfg_casual_splits_vsrd
 from config_train import cfg_casual_splits_vsrd_pp
 from config_train import cfg_casual_splits_autolabels
+from config_train import cfg_casual_splits_gt
 
 
 from data import make_data_loader
@@ -122,6 +125,8 @@ def setup(args):
         cfg = cfg_vsrd_24_splits_vsrd_pp
     elif args.split_type=='vsrd24_splits_autolabels':
         cfg = cfg_vsrd_24_splits_autolabels
+    elif args.split_type=='vsrd24_splits_gt':
+        cfg = cfg_vsrd_24_splits_gt
     
     elif args.split_type=='casual_splits_vsrd':
         cfg = cfg_casual_splits_vsrd
@@ -129,6 +134,8 @@ def setup(args):
         cfg = cfg_casual_splits_vsrd_pp
     elif args.split_type=='casual_splits_autolabels':
         cfg = cfg_casual_splits_autolabels
+    elif args.split_type=='casual_splits_gt':
+        cfg = cfg_casual_splits_gt
         
     else:
         raise NotImplementedError
@@ -167,7 +174,7 @@ def main(args):
     model.to(device)
     
     if args.pretrained_model_path =='none':
-        ckpts = Nones
+        ckpts = None
     else:
         # load the pretrained model here
         ckpts = torch.load(args.pretrained_model_path)
