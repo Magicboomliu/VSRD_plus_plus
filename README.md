@@ -437,6 +437,7 @@ _C.TRAIN.DYNAMIC_LABELS_PATH = "<dataset_path>/dynamic_mask.txt"
 - [MeMFlow](https://github.com/DQiaole/MemFlow) for optical flow estimation
 - [IGEVStereo](https://github.com/gangweix/IGEV) for depth estimation
 - [InternImage](https://github.com/OpenGVLab/InternImage) for 2D detection
+- [VSRD](https://github.com/Magicboomliu/VSRD) for providing the base of this code.
 
 
 ---
