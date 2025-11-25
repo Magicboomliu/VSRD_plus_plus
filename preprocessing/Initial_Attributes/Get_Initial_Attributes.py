@@ -35,7 +35,8 @@ def Get_Initial_Attributes(multi_inputs,dynamic_mask_list,device="cuda:0"):
 
     # Step 1: Get the RoI Lidar Points
     for keys in tqdm(multi_inputs.keys()):
-        ROI_LiDAR_Dict,projected_mask = Get_Pseudo_Roi_LiDAR(data_inputs=multi_inputs[keys],target_frame_instance_ids=multi_inputs[0]['instance_ids'][0].cpu().numpy().tolist(),
+        ROI_LiDAR_Dict,projected_mask = Get_Pseudo_Roi_LiDAR(data_inputs=multi_inputs[keys],
+                                                             target_frame_instance_ids=multi_inputs[0]['instance_ids'][0].cpu().numpy().tolist(),
                             threeD_visualization=False)
         
         # there is a possibility that the project_mask is None

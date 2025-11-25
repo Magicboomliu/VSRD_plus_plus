@@ -1,9 +1,9 @@
 Make_Json_Prediction(){
 cd ..
 cd tools/Predictions
-ROOT_DIRNAME="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-CKPT_DIRNAME="/media/zliu/data12/dataset/Tsubame_Results/V1/ckpts/"
-DYNAMIC_DIRNAME="/media/zliu/data12/dataset/VSRD_PP_Sync/est_dynamic_list/"
+ROOT_DIRNAME="/data/dataset/KITTI/KITTI360_For_Docker"
+CKPT_DIRNAME="/home/Journals2025/VSRD_plus_plus/Optimized_Based/ckpts/with_pseudo_depth_ssl_igevstereo"
+DYNAMIC_DIRNAME="/data/dataset/KITTI/KITTI360_For_Docker/est_dynamic_list/"
 INPUT_MODEL_TYPE="velocity_with_init"
 
 NUM_WORKERS=4

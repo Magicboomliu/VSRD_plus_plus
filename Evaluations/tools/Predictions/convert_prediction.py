@@ -75,14 +75,13 @@ def save_prediction(filename, class_names, boxes_3d, boxes_2d, scores):
             )
 
 def convert_predictions(sequence, root_dirname, ckpt_dirname, class_names,json_folder,output_labelname):
-    
 
     prediction_dirname = os.path.join(json_folder, os.path.basename(ckpt_dirname))
+
     prediction_filenames = sorted(glob.glob(os.path.join(root_dirname, prediction_dirname, sequence, "image_00", "data_rect", "*.json")))
-
-
-    
     for prediction_filename in prediction_filenames:
+        
+
         with open(prediction_filename) as file:
             prediction = json.load(file)
 
@@ -112,13 +111,14 @@ def convert_predictions(sequence, root_dirname, ckpt_dirname, class_names,json_f
         
 
 
-        if '/' in prediction_dirname:
+        if '/' == prediction_dirname[-1]:
             prediction_dirname = prediction_dirname[:-1]
-
         
 
         annotation_filename = prediction_filename.replace(prediction_dirname, "annotations")
 
+
+        
         with open(annotation_filename) as file:
             annotation = json.load(file)
 
@@ -152,37 +152,44 @@ def convert_predictions(sequence, root_dirname, ckpt_dirname, class_names,json_f
         gt_boxes_2d = torchvision.ops.masks_to_boxes(gt_masks).unflatten(-1, (2, 2))
         
         
-
-
         if not torch.all(torch.isfinite(gt_boxes_3d)): continue
-
-        label_dirname = os.path.join(output_labelname, os.path.basename(ckpt_dirname))
-        label_filename = os.path.splitext(os.path.relpath(prediction_filename, root_dirname))[0]
-        label_filename = os.path.join(root_dirname, label_dirname, f"{label_filename}.txt")
-
-        os.makedirs(os.path.dirname(label_filename), exist_ok=True)
-
+        # Save predictions to predictions subdirectory
+        ckpt_basename = os.path.basename(ckpt_dirname)
+        rel_path = os.path.relpath(prediction_filename, root_dirname)
+        rel_path_no_ext = os.path.splitext(rel_path)[0]
+        # Replace predictions/{ckpt_basename} with {output_labelname}/{ckpt_basename}/predictions
+        if rel_path_no_ext.startswith(f"predictions/{ckpt_basename}/"):
+            rel_path_no_ext = rel_path_no_ext.replace(f"predictions/{ckpt_basename}/", f"{output_labelname}/{ckpt_basename}/predictions/", 1)
+        else:
+            rel_path_no_ext = rel_path_no_ext.replace("predictions/", f"{output_labelname}/{ckpt_basename}/predictions/", 1)
+        prediction_label_filename = os.path.join(root_dirname, f"{rel_path_no_ext}.txt")
+        
+        os.makedirs(os.path.dirname(prediction_label_filename), exist_ok=True)
         save_prediction(
-            filename=label_filename,
+            filename=prediction_label_filename,
             class_names=pd_class_names,
             boxes_3d=pd_boxes_3d,
             boxes_2d=pd_boxes_2d,
             scores=pd_confidences,
         )
 
+        # Save GT to gt subdirectory (will be overwritten by Step3 with dynamic attributes)
         my_gt_filename = prediction_filename.replace(json_folder,'my_gts')
+        rel_path_gt = os.path.relpath(my_gt_filename, root_dirname)
+        rel_path_gt_no_ext = os.path.splitext(rel_path_gt)[0]
+        # Replace my_gts/{ckpt_basename} with {output_labelname}/{ckpt_basename}/gt
+        if rel_path_gt_no_ext.startswith(f"my_gts/{ckpt_basename}/"):
+            rel_path_gt_no_ext = rel_path_gt_no_ext.replace(f"my_gts/{ckpt_basename}/", f"{output_labelname}/{ckpt_basename}/gt/", 1)
+        elif rel_path_gt_no_ext.startswith("my_gts/"):
+            rel_path_gt_no_ext = rel_path_gt_no_ext.replace("my_gts/", f"{output_labelname}/{ckpt_basename}/gt/", 1)
+        else:
+            # Fallback: use output_labelname/ckpt_basename/gt
+            rel_path_gt_no_ext = rel_path_gt_no_ext.replace(f"predictions/{ckpt_basename}/", f"{output_labelname}/{ckpt_basename}/gt/", 1)
+        gt_label_filename = os.path.join(root_dirname, f"{rel_path_gt_no_ext}.txt")
         
-        label_dirname = os.path.join(output_labelname, os.path.basename(ckpt_dirname))
-        label_filename = os.path.splitext(os.path.relpath(my_gt_filename, root_dirname))[0]
-        label_filename = os.path.join(root_dirname, label_dirname, f"{label_filename}.txt")
-        
-        
-
-        os.makedirs(os.path.dirname(label_filename), exist_ok=True)
-
-
+        os.makedirs(os.path.dirname(gt_label_filename), exist_ok=True)
         save_prediction(
-            filename=label_filename,
+            filename=gt_label_filename,
             class_names=gt_class_names,
             boxes_3d=gt_boxes_3d,
             boxes_2d=gt_boxes_2d,
@@ -195,6 +202,7 @@ def main(args):
     # dynamic_seqences = [sequences[2],sequences[6]] # for ablations
     
     dynamic_seqences = sequences
+    
 
     with multiprocessing.Pool(args.num_workers) as pool:
         with tqdm.tqdm(total=len(sequences)) as progress_bar:

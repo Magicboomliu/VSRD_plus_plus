@@ -248,7 +248,7 @@ def main(args=None):
     USE_DYNAMIC_MASK_FLAG = my_conf_train.TRAIN.USE_DYNAMIC_MASK
     DYNAMIC_TYPE = my_conf_train.TRAIN.DYNAMIC_MODELING_TYPE
     USE_RDF_MODELING_FLAG = my_conf_train.TRAIN.USE_RDF_MODELING
-
+    
     
     def train():
         stop_watch.start()

@@ -132,6 +132,8 @@ def main(args=None):
         from Optimized_Based.configs.train_config_sequence_10 import _C as my_conf_train
     if args.config_path=='ablation_ours':
         from Optimized_Based.configs.train_config_ablation_vsrdPP_Full import _C as my_conf_train
+    elif args.config_path=='ablation_selective':
+        from Optimized_Based.configs.round1_ablations_sequnce_selective_10 import _C as my_conf_train
 
     
     
@@ -284,10 +286,14 @@ def main(args=None):
                         content = content.strip()
                         current_returned_ids,current_returned_filename,current_return_labels = content.split(" ")
                         if current_returned_filename == image_filename:
+                            # current optimized instance ids
                             dynamic_labels_for_target_view['instance_ids'] = current_returned_ids
+                            # current labels
                             dynamic_labels_for_target_view["dynamic_labels"] = current_return_labels
                             break
             
+            
+
             
             # Output Locations
             ckpt_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "ckpts/{}".format(my_conf_train.TRAIN.MODEL_TYPE)),image_dirname)
@@ -296,6 +302,11 @@ def main(args=None):
             if os.path.exists(os.path.join(ckpt_dirname, f"step_{my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS - 1}.pt")):
                 logger.warning(f"[{image_filename}] Already optimized. Skip this sample.")
                 continue
+            
+            print("current ckpt dirname: ", ckpt_dirname)
+            print("current log dirname: ", log_dirname)
+            print("current out dirname: ", out_dirname)
+
 
             os.makedirs(log_dirname, exist_ok=True)
             log_filename = os.path.join(log_dirname, "log.txt")
@@ -449,14 +460,17 @@ def main(args=None):
             # Read the Dynamic Masks
             if USE_DYNAMIC_MODELING_FLAG:
                 if USE_DYNAMIC_MASK_FLAG:
+                    # get all the labels which is a string 
                     dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
                 
                     dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
             
 
-
-            multi_inputs = Get_Initial_Attributes(multi_inputs=multi_inputs,dynamic_mask_list=dynamic_mask_for_target_view,
+            print("Begin Initializations..........")
+            multi_inputs = Get_Initial_Attributes(multi_inputs=multi_inputs,
+                                                  dynamic_mask_list=dynamic_mask_for_target_view,
                                                   device=device_id)
+            
             gt_loc = multi_inputs[0]['est_loc'].float().contiguous().to(device_id)
             gt_velocity = multi_inputs[0]['velo'].float().contiguous().to(device_id)
             gt_orientation = multi_inputs[0]['est_orient'].float().contiguous().to(device_id)
@@ -491,7 +505,7 @@ def main(args=None):
                     pass
     
             
-            
+            print("After initailzaition....")
             # ================================================================
             # optimizer
             if USE_DYNAMIC_MODELING_FLAG and  DYNAMIC_TYPE=='mlp':

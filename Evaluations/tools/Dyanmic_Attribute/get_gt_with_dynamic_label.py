@@ -241,11 +241,20 @@ def dynamic_attribute_func(sequence, root_dirname, ckpt_dirname, class_names,jso
     
 
     for prediction_filename in tqdm(prediction_filenames):
-
-        if '/' in prediction_dirname:
-            prediction_dirname = prediction_dirname[:-1]
         
-        annotation_filename = prediction_filename.replace(prediction_dirname, "annotations")
+        # Build annotation filename by replacing predictions/{ckpt_basename} with annotations
+        # More reliable method: get relative path and replace the folder name
+        rel_path = os.path.relpath(prediction_filename, root_dirname)
+        ckpt_basename = os.path.basename(ckpt_dirname)
+        # Replace predictions/{ckpt_basename} with annotations
+        if rel_path.startswith(f"predictions/{ckpt_basename}/"):
+            annotation_rel_path = rel_path.replace(f"predictions/{ckpt_basename}/", "annotations/", 1)
+        elif rel_path.startswith("predictions/"):
+            annotation_rel_path = rel_path.replace("predictions/", "annotations/", 1)
+        else:
+            # Fallback: try to replace prediction_dirname
+            annotation_rel_path = rel_path.replace(prediction_dirname, "annotations")
+        annotation_filename = os.path.join(root_dirname, annotation_rel_path)
 
 
         instance_ids,gt_boxes_3d,gt_masks,gt_boxes_2d,_,_ = get_organized_data(annotation_filename=annotation_filename,
@@ -268,11 +277,21 @@ def dynamic_attribute_func(sequence, root_dirname, ckpt_dirname, class_names,jso
             dynamic_label_list = resultd_dict['dynamic_label']
             
             gt_class_names = ['car'] * len(dynamic_label_list)
-            my_gt_filename = prediction_filename.replace("predictions",'my_gts_with_dynamic')
             
-            label_dirname = os.path.join(output_labelname, os.path.basename(ckpt_dirname))
-            label_filename = os.path.splitext(os.path.relpath(my_gt_filename, root_dirname))[0]
-            label_filename = os.path.join(root_dirname, label_dirname, f"{label_filename}.txt")
+            # Build output path: {output_labelname}/{ckpt_basename}/{sequence}/image_00/data_rect/{frame_id}.txt
+            # Get relative path from prediction_filename
+            rel_path = os.path.relpath(prediction_filename, root_dirname)
+            # Remove .json extension
+            rel_path_no_ext = os.path.splitext(rel_path)[0]
+            # Replace predictions/{ckpt_basename} with {output_labelname}/{ckpt_basename}
+            ckpt_basename = os.path.basename(ckpt_dirname)
+            if rel_path_no_ext.startswith(f"predictions/{ckpt_basename}/"):
+                # Replace: predictions/{ckpt_basename}/sequence/... -> {output_labelname}/{ckpt_basename}/sequence/...
+                rel_path_no_ext = rel_path_no_ext.replace(f"predictions/{ckpt_basename}/", f"{output_labelname}/{ckpt_basename}/", 1)
+            elif rel_path_no_ext.startswith("predictions/"):
+                # Fallback: just replace predictions with output_labelname
+                rel_path_no_ext = rel_path_no_ext.replace("predictions/", f"{output_labelname}/", 1)
+            label_filename = os.path.join(root_dirname, f"{rel_path_no_ext}.txt")
         
             os.makedirs(os.path.dirname(label_filename), exist_ok=True)
 
@@ -287,11 +306,6 @@ def dynamic_attribute_func(sequence, root_dirname, ckpt_dirname, class_names,jso
             continue
         
         
-
-            
-        
-
-        
         
 
 def main(args):
@@ -299,11 +313,9 @@ def main(args):
     sequences = list(map(os.path.basename, sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*")))))
     # dynamic_seqences = [sequences[2],sequences[6]] # for ablation studies
     
-    dynamic_seqences = [sequences[3]]
+    dynamic_seqences = sequences
     
     # dynamic_seqences.remove('2013_05_28_drive_0004_sync')
-
-
 
     with multiprocessing.Pool(args.num_workers) as pool:
         with tqdm(total=len(sequences)) as progress_bar:

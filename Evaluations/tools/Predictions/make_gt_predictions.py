@@ -27,7 +27,9 @@ sys.path.append("..")
 from vsrd import utils
 from torch.utils.data import Dataset, DataLoader
 from vsrd.datasets.kitti360_dataset import KITTI360Dataset
-from vsrd.datasets.transforms import Resizer,MaskAreaFilter,MaskRefiner,BoxGenerator,BoxSizeFilter,SoftRasterizer
+from vsrd.datasets.transforms import Resizer,MaskAreaFilter,BoxGenerator,BoxSizeFilter,SoftRasterizer
+
+from vsrd.transforms import MaskRefiner  # Use the one that accepts tensor directly
 
 # VSRD Dataset
 from vsrd.utils import collate_nested_dicts,Dict

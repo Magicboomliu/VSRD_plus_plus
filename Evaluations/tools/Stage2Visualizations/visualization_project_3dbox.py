@@ -10,6 +10,7 @@ import pycocotools.mask
 import torch
 import json
 import skimage.io
+import cv2
 from geo_op import rotation_matrix_x,rotation_matrix_y,rotation_matrix_z
 import argparse
 
@@ -22,11 +23,35 @@ def read_annotation(annotation_filename,class_names=['car']):
     intrinsic_matrix = torch.as_tensor(annotation["intrinsic_matrix"])
     extrinsic_matrix = torch.as_tensor(annotation["extrinsic_matrix"])
 
+    # Extract masks for cars
+    instance_ids = {
+        class_name: list(masks.keys())
+        for class_name, masks in annotation["masks"].items()
+        if class_name in class_names
+    }
 
-    return dict(
-        intrinsic_matrix=intrinsic_matrix,
-        extrinsic_matrix=extrinsic_matrix,
-    )
+    if instance_ids:
+        masks = torch.cat([
+            torch.as_tensor([
+                pycocotools.mask.decode(annotation["masks"][class_name][instance_id])
+                for instance_id in instance_ids
+            ], dtype=torch.float)
+            for class_name, instance_ids in instance_ids.items()
+        ], dim=0)
+
+        return dict(
+            intrinsic_matrix=intrinsic_matrix,
+            extrinsic_matrix=extrinsic_matrix,
+            masks=masks,
+            instance_ids=instance_ids,
+        )
+    else:
+        return dict(
+            intrinsic_matrix=intrinsic_matrix,
+            extrinsic_matrix=extrinsic_matrix,
+            masks=None,
+            instance_ids=None,
+        )
 
 
 def read_image(image_path):
@@ -110,6 +135,9 @@ def main(args):
         extrinsic_matrix = torch.as_tensor(annotions_raw_data["extrinsic_matrix"])
         target_extrinsic_matrix = extrinsic_matrix
         inverse_target_extrinsic_matrix = torch.linalg.inv(target_extrinsic_matrix)
+        
+        # Get masks for visualization
+        gt_masks = annotions_raw_data.get("masks", None)
 
 
         x_axis, y_axis, _ = target_extrinsic_matrix[..., :3, :3]
@@ -132,6 +160,56 @@ def main(args):
         # get the object bounding boxes
         copied_image = image_data.copy()
         
+        # Overlay segmentation masks on the image
+        if gt_masks is not None and len(gt_masks) > 0:
+            # Convert masks to numpy and overlay on image
+            mask_overlay = copied_image.copy().astype(np.float32)
+            image_h, image_w = image_data.shape[:2]
+            
+            for mask_idx, mask in enumerate(gt_masks):
+                mask_np = mask.cpu().numpy() if isinstance(mask, torch.Tensor) else mask
+                # Ensure mask matches image dimensions
+                if mask_np.shape[:2] != (image_h, image_w):
+                    # Resize mask if needed
+                    mask_np = cv2.resize(mask_np.astype(np.float32), (image_w, image_h), interpolation=cv2.INTER_NEAREST)
+                
+                # Create colored mask overlay (red with transparency for cars)
+                mask_color = np.array([255, 0, 0])  # Red color for car masks
+                alpha = 0.3  # Transparency
+                
+                # Expand mask to 3 channels if needed
+                if len(mask_np.shape) == 2:
+                    mask_3d = np.stack([mask_np, mask_np, mask_np], axis=-1)
+                else:
+                    mask_3d = mask_np
+                
+                # Overlay mask on image
+                mask_overlay = mask_overlay * (1 - alpha * mask_3d) + mask_color * (alpha * mask_3d)
+            
+            copied_image = np.clip(mask_overlay, 0, 255).astype(np.uint8)
+        
+        # Save mask-only image if masks exist
+        if gt_masks is not None and len(gt_masks) > 0:
+            mask_output_folder = os.path.join(stage2_vis_output_folder, "masks")
+            os.makedirs(mask_output_folder, exist_ok=True)
+            # Combine all masks into one
+            image_h, image_w = image_data.shape[:2]
+            combined_mask = np.zeros((image_h, image_w), dtype=np.uint8)
+            
+            for mask_idx, mask in enumerate(gt_masks):
+                mask_np = mask.cpu().numpy() if isinstance(mask, torch.Tensor) else mask
+                # Ensure mask matches image dimensions
+                if mask_np.shape[:2] != (image_h, image_w):
+                    import cv2
+                    mask_np = cv2.resize(mask_np.astype(np.float32), (image_w, image_h), interpolation=cv2.INTER_NEAREST)
+                
+                # Add mask to combined mask (each instance gets a different value)
+                mask_binary = (mask_np > 0.5).astype(np.uint8)
+                combined_mask = np.maximum(combined_mask, mask_binary * 255)
+            
+            # Save as grayscale mask image
+            mask_filename = os.path.join(mask_output_folder, target_basename.replace(".txt", "_mask.png"))
+            skimage.io.imsave(mask_filename, combined_mask)
         
         for inner_idx, object in enumerate(est_obj_data):
 

@@ -3,6 +3,50 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+import torch
+
+def safe_bmm(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    # 形状检查
+    assert a.dim() == 3 and b.dim() == 3, f"Expect 3D tensors, got {a.shape}, {b.shape}"
+    assert a.shape[0] == b.shape[0] and a.shape[2] == b.shape[1], \
+        f"Batch/inner dims mismatch: {a.shape} x {b.shape}"
+
+    # dtype / device / contiguous 统一
+    a = a.to(dtype=torch.float32, memory_format=torch.contiguous_format).contiguous()
+    b = b.to(dtype=torch.float32, memory_format=torch.contiguous_format).contiguous()
+
+    # 快速“自检”——有些版本 cuBLAS 遇到 NaN/Inf 也会直接 INVALID_VALUE
+    if torch.isnan(a).any() or torch.isinf(a).any() or torch.isnan(b).any() or torch.isinf(b).any():
+        raise ValueError("Input contains NaN/Inf; clean your tensors before bmm.")
+
+    # 路径1：einsum（很多情况下可避开 cuBLAS 的触发点）
+    try:
+        return torch.einsum('bij,bjk->bik', a, b)
+    except RuntimeError:
+        pass
+
+    # 路径2：matmul
+    try:
+        return a @ b
+    except RuntimeError:
+        pass
+
+    # 路径3：baddbmm（有时调用的是不同的代码路径）
+    try:
+        out = torch.zeros((a.shape[0], a.shape[1], b.shape[2]), device=a.device, dtype=a.dtype)
+        return torch.baddbmm(out, a, b, beta=0.0, alpha=1.0)
+    except RuntimeError:
+        pass
+
+    # 路径4：最后兜底，逐 batch 计算（慢，但稳）
+    outs = []
+    for i in range(a.shape[0]):
+        outs.append(a[i].mm(b[i]))
+    return torch.stack(outs, dim=0)
+
+
+
+
 def transform_bounding_boxes_to_world(extrinsic_matrix, bounding_boxes_camera):
     '''
     Inputs: 
@@ -13,12 +57,16 @@ def transform_bounding_boxes_to_world(extrinsic_matrix, bounding_boxes_camera):
     ones = torch.ones((N, 8, 1), device=bounding_boxes_camera.device)  # [N, 8, 1]
     bounding_boxes_camera_homogeneous = torch.cat([bounding_boxes_camera, ones], dim=-1)  # [N, 8, 4]
 
-    extrinsic_matrix = extrinsic_matrix.expand(N, -1, -1)  # [N, 4, 4]
+    extrinsic_matrix = extrinsic_matrix.expand(N, -1, -1)  # [N, 4, 4]   
+    
+
+     
     bounding_boxes_world_homogeneous = torch.bmm(extrinsic_matrix, bounding_boxes_camera_homogeneous.transpose(1, 2)).transpose(1, 2)  # [N, 8, 4]
 
     bounding_boxes_world = bounding_boxes_world_homogeneous[..., :3] / bounding_boxes_world_homogeneous[..., 3:4]
     
     return bounding_boxes_world
+
 
 def rotation_matrix_y(cos, sin):
     one = torch.ones_like(cos)

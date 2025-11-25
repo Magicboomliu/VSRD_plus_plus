@@ -6,14 +6,13 @@ def parse_args():
     parser.add_argument(
         "--soft_linked_folder",
         type=str,
-        default=None,
+        default="/data/dataset/KITTI/KITTI360_For_Docker",
         help="Path to pretrained model or model identifier from huggingface.co/models.")
 
     parser.add_argument(
         "--source_root_folder",
         type=str,
-        default=None,
-        required=True,
+        default="/data/dataset/KITTI/KITTI360_For_Upload",
         help="Path to pretrained model or model identifier from huggingface.co/models.")
 
     # get the local rank

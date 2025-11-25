@@ -1,10 +1,10 @@
 Convert_To_KITTI_Format(){
 cd ..
 cd tools/Predictions
-ROOT_DIRNAME="/media/zliu/data12/dataset/VSRD_PP_Sync/"
-CKPT_DIRNAME="/media/zliu/data12/dataset/Tsubame_Results/V1/ckpts/"
+ROOT_DIRNAME="/data/dataset/KITTI/KITTI360_For_Docker"
+CKPT_DIRNAME="/home/Journals2025/VSRD_plus_plus/Optimized_Based/ckpts/Prefect_GT_Masks"
 JSON_FOLDERNAME="predictions"
-OUTPUT_LABELNAME='label_vsrd_pp_full_completed'
+OUTPUT_LABELNAME='perfect_prediction'
 NUM_WORKERS=4
 
 

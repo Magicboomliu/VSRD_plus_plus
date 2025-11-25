@@ -27,7 +27,8 @@ sys.path.append("..")
 from vsrd import utils
 from torch.utils.data import Dataset, DataLoader
 from vsrd.datasets.kitti360_dataset import KITTI360Dataset
-from vsrd.datasets.transforms import Resizer,MaskAreaFilter,MaskRefiner,BoxGenerator,BoxSizeFilter,SoftRasterizer
+from vsrd.datasets.transforms import Resizer,MaskAreaFilter,BoxGenerator,BoxSizeFilter,SoftRasterizer
+from vsrd.transforms import MaskRefiner  # Use the one that accepts tensor directly
 
 # VSRD Dataset
 from vsrd.utils import collate_nested_dicts,Dict
@@ -49,6 +50,9 @@ from vsrd.operations.geometric_operations import project_box_3d
 from vsrd.operations.geometric_operations import rotation_matrix,rotation_matrix_x,rotation_matrix_y,rotation_matrix_z
 from vsrd.operations.kitti360_operations import box_3d_iou
 
+from vsrd.datasets.transforms import Resizer,MaskAreaFilter,BoxGenerator,BoxSizeFilter,SoftRasterizer
+# MaskRefiner is imported from vsrd.transforms above (line 31)
+
 from vsrd import visualization
 from vsrd.utils import Dict
 from Optimized_Based.configs import conf_val
@@ -67,6 +71,7 @@ import multiprocessing
 
 import scipy as sp
 import pycocotools.mask
+from tqdm import tqdm 
 
 def decode_box_3d(locations, dimensions, orientations,residual=None):
     # NOTE: use the KITTI-360 "evaluation" format instaed of the KITTI-360 "annotation" format
@@ -131,6 +136,9 @@ def make_predictions(
     
     # group txt
     group_filename = os.path.join(root_dirname, "filenames", split_dirname, sequence, "grouped_image_filenames.txt")
+    
+    
+    
     assert os.path.exists(group_filename)
     with open(group_filename) as file:
         grouped_image_filenames = {
@@ -150,6 +158,9 @@ def make_predictions(
     
     # dynamic txt
     dynamic_txt_filename = os.path.join(dynamic_dirname,"sync"+sequence[-7:-5],"dynamic_mask.txt")
+    
+
+    
     assert os.path.exists(dynamic_txt_filename)
     with open(dynamic_txt_filename) as file:
         dynamic_instance_list = {
@@ -158,7 +169,7 @@ def make_predictions(
         }
         
     
-    for instance_ids, grouped_image_filenames in grouped_image_filenames.items():
+    for instance_ids, grouped_image_filenames in tqdm(grouped_image_filenames.items()):
         
         # get the target image filename
         target_image_filename = sampled_image_filenames[instance_ids]
@@ -263,7 +274,7 @@ def make_predictions(
                 for class_name, masks in target_annotation["masks"].items()
                 if class_name in class_names], dim=0)
 
-            mine_gt_masks = vsrd.transforms.MaskRefiner()(mine_gt_masks)["masks"]
+            mine_gt_masks = MaskRefiner()(mine_gt_masks)["masks"]
             mine_gt_boxes_2d = torchvision.ops.masks_to_boxes(mine_gt_masks.bool()).unflatten(-1, (2, 2))
             
             # get the instance ids
@@ -347,7 +358,7 @@ def make_predictions(
                     if class_name in class_names
                 ], dim=0)
 
-                source_gt_masks = vsrd.transforms.MaskRefiner()(source_gt_masks)["masks"]
+                source_gt_masks = MaskRefiner()(source_gt_masks)["masks"]
                 source_gt_boxes_2d = torchvision.ops.masks_to_boxes(source_gt_masks.bool()).unflatten(-1, (2, 2))
 
 
@@ -494,7 +505,7 @@ def make_predictions(
                 for class_name, masks in target_annotation["masks"].items()
                 if class_name in class_names], dim=0)
 
-            mine_gt_masks = vsrd.transforms.MaskRefiner()(mine_gt_masks)["masks"]
+            mine_gt_masks = MaskRefiner()(mine_gt_masks)["masks"]
             mine_gt_boxes_2d = torchvision.ops.masks_to_boxes(mine_gt_masks.bool()).unflatten(-1, (2, 2))
             
             # get the instance ids
@@ -556,7 +567,7 @@ def make_predictions(
                     if class_name in class_names
                 ], dim=0)
 
-                source_gt_masks = vsrd.transforms.MaskRefiner()(source_gt_masks)["masks"]
+                source_gt_masks = MaskRefiner()(source_gt_masks)["masks"]
                 source_gt_boxes_2d = torchvision.ops.masks_to_boxes(source_gt_masks.bool()).unflatten(-1, (2, 2))
 
 
@@ -707,7 +718,7 @@ def make_predictions(
                 for class_name, masks in target_annotation["masks"].items()
                 if class_name in class_names], dim=0)
 
-            mine_gt_masks = vsrd.transforms.MaskRefiner()(mine_gt_masks)["masks"]
+            mine_gt_masks = MaskRefiner()(mine_gt_masks)["masks"]
             mine_gt_boxes_2d = torchvision.ops.masks_to_boxes(mine_gt_masks.bool()).unflatten(-1, (2, 2))
             
             # get the instance ids
@@ -793,7 +804,7 @@ def make_predictions(
                     if class_name in class_names
                 ], dim=0)
 
-                source_gt_masks = vsrd.transforms.MaskRefiner()(source_gt_masks)["masks"]
+                source_gt_masks = MaskRefiner()(source_gt_masks)["masks"]
                 source_gt_boxes_2d = torchvision.ops.masks_to_boxes(source_gt_masks.bool()).unflatten(-1, (2, 2))
 
 
@@ -942,7 +953,7 @@ def make_predictions(
                 for class_name, masks in target_annotation["masks"].items()
                 if class_name in class_names], dim=0)
 
-            mine_gt_masks = vsrd.transforms.MaskRefiner()(mine_gt_masks)["masks"]
+            mine_gt_masks = MaskRefiner()(mine_gt_masks)["masks"]
             mine_gt_boxes_2d = torchvision.ops.masks_to_boxes(mine_gt_masks.bool()).unflatten(-1, (2, 2))
             
             # get the instance ids
@@ -951,9 +962,6 @@ def make_predictions(
                 index = [target_readed_instance_ids.index(ids) for ids in instance_ids]
                 mine_gt_boxes_2d = mine_gt_boxes_2d[index]
   
-                
-
-            
             callbacks = []
 
             for source_image_filename in grouped_image_filenames:
@@ -1167,7 +1175,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description="VSRD++: Prediction Maker for KITTI-360")
     parser.add_argument("--root_dirname", type=str, default="/media/zliu/data12/dataset/VSRD_PP_Sync/")
     parser.add_argument("--ckpt_dirname", type=str, default="ckpts/kitti_360/vsrd")
-    parser.add_argument("--ckpt_filename", type=str, default="step_2499.pt")
+    parser.add_argument("--ckpt_filename", type=str, default="step_2999.pt")
     parser.add_argument("--dyanmic_root_filename",type=str,default="None")
     parser.add_argument("--input_model_type",type=str,default="None",help="Selected from [vanilla,velocity,mlp,velocity_with_init]")
     parser.add_argument("--saved_pseudo_folder_path",type=str,default="predictions",

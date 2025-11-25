@@ -72,6 +72,7 @@ class KITTI360Dataset(torch.utils.data.Dataset):
         for filename in filenames:
             with open(filename) as file:
                 for line in file:
+
                     # 3 colums: 1 is the instance id                     
                     _, target_image_filename, source_relative_indices = line.strip().split(" ")
                     source_relative_indices = list(map(int, source_relative_indices.split(",")))
