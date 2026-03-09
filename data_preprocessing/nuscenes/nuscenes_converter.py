@@ -4,7 +4,7 @@
 #  Modified by Xiaoyu Tian
 #  （下方中文注释由项目使用者补充，便于理解数据处理流程）
 # ---------------------------------------------
-import mmcv
+import mmcv  # 仅用于读取 pkl/json；新版本不再提供 dump 等接口
 import numpy as np
 import os
 from collections import OrderedDict
@@ -14,6 +14,7 @@ from os import path as osp
 from pyquaternion import Quaternion
 from shapely.geometry import MultiPoint, box
 from typing import List, Tuple, Union
+import pickle  # 用于替代旧版 mmcv.dump 的保存功能
 
 try:
     # 旧版本 mmdet3d（<=0.18.x）路径
@@ -149,26 +150,32 @@ def create_nuscenes_infos(root_path,
         nusc, nusc_can_bus, train_scenes, val_scenes,
         test, max_sweeps=max_sweeps)
     print("traversing all the samples......done")
-    quit()
     # 记录一些全局元信息（目前只包含版本号）
     metadata = dict(version=version)
     if test:
         print('test sample: {}'.format(len(train_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
-        info_path = osp.join(out_path,
-                             '{}_infos_temporal_test.pkl'.format(info_prefix))
-        mmcv.dump(data, info_path)
+        info_path = osp.join(
+            out_path, f'{info_prefix}_infos_temporal_test.pkl'
+        )
+        # 旧代码使用 mmcv.dump，新版 mmcv 已移除此接口，这里改为标准库 pickle
+        with open(info_path, 'wb') as f:
+            pickle.dump(data, f)
     else:
         print('train sample: {}, val sample: {}'.format(
             len(train_nusc_infos), len(val_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
-        info_path = osp.join(out_path,
-                             '{}_infos_temporal_train.pkl'.format(info_prefix))
-        mmcv.dump(data, info_path)
+        info_path = osp.join(
+            out_path, f'{info_prefix}_infos_temporal_train.pkl'
+        )
+        with open(info_path, 'wb') as f:
+            pickle.dump(data, f)
         data['infos'] = val_nusc_infos
-        info_val_path = osp.join(out_path,
-                                 '{}_infos_temporal_val.pkl'.format(info_prefix))
-        mmcv.dump(data, info_val_path)
+        info_val_path = osp.join(
+            out_path, f'{info_prefix}_infos_temporal_val.pkl'
+        )
+        with open(info_val_path, 'wb') as f:
+            pickle.dump(data, f)
 
 
 def get_available_scenes(nusc):
@@ -265,17 +272,30 @@ def _fill_trainval_infos(nusc,
     # 旧代码用 mmcv.track_iter_progress 显示进度，新版 mmcv 已移除此接口，
     # 这里直接用普通 for 循环，如需进度条可自行替换为 tqdm 等。
     for sample in tqdm(nusc.sample):
+        # 当前的 sample 对应的 顶部的激光雷达帧 （LIDAR——TOP）的 sample_data 的 token.
+        #  这一帧点云数据 在 Nuscenes数据库里面的唯一ID
         lidar_token = sample['data']['LIDAR_TOP']
+        # 所有的元数据。
         sd_rec = nusc.get('sample_data', sample['data']['LIDAR_TOP'])
+        '''
+        sd_rec keys: ['token', 'sample_token', 'ego_pose_token', 
+        'calibrated_sensor_token', 'timestamp', 'fileformat', 
+        'is_key_frame', 'height', 'width', 'filename', 'prev', 
+        'next', 'sensor_modality', 'channel']
+        '''
+        # 当前的传感器（LIDAR_TOP）的标定信息。
         cs_record = nusc.get('calibrated_sensor',
                              sd_rec['calibrated_sensor_token'])
+        
         pose_record = nusc.get('ego_pose', sd_rec['ego_pose_token'])
         lidar_path, boxes, _ = nusc.get_sample_data(lidar_token)
-
+        
         # 旧版使用 mmcv.check_file_exist，新版 mmcv 已移除此接口，这里改为标准库实现
         if not os.path.exists(lidar_path):
             raise FileNotFoundError(f"LIDAR 文件不存在: {lidar_path}")
         can_bus = _get_can_bus_info(nusc, nusc_can_bus, sample)
+        
+        
         ##
         info = {
             'lidar_path': lidar_path,
@@ -297,7 +317,7 @@ def _fill_trainval_infos(nusc,
         if sample['next'] == '':
             frame_idx = 0
         else:
-            frame_idx += 1
+            frame_idx += 1  # 这个只是一个sample
 
         l2e_r = info['lidar2ego_rotation']
         l2e_t = info['lidar2ego_translation']
@@ -321,7 +341,8 @@ def _fill_trainval_infos(nusc,
             cam_info = obtain_sensor2top(nusc, cam_token, l2e_t, l2e_r_mat,
                                          e2g_t, e2g_r_mat, cam)
             cam_info.update(cam_intrinsic=cam_intrinsic)
-            info['cams'].update({cam: cam_info})
+            # 当前的相机在自己的坐标系下的标定信息， 转换为 “相机——> 当前关键帧LIDAR_TOP”的外参矩阵。
+
 
         # obtain sweeps for a single key-frame
         sd_rec = nusc.get('sample_data', sample['data']['LIDAR_TOP'])
@@ -505,7 +526,16 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
         json_prefix = f'{info_path[:-4]}_mono3d'
     else:
         json_prefix = f'{info_path[:-4]}'
-    mmcv.dump(coco_2d_dict, f'{json_prefix}.coco.json')
+    # 这里同样用 pickle/json 手动保存 COCO 标注
+    json_path = f'{json_prefix}.coco.json'
+    # 使用 mmcv.dump 可能在新版本不存在，这里改为 mmcv.fileio 或标准 json
+    try:
+        from mmcv import dump as mmcv_dump  # 兼容某些版本仍然提供的别名
+        mmcv_dump(coco_2d_dict, json_path)
+    except Exception:
+        import json
+        with open(json_path, 'w') as f:
+            json.dump(coco_2d_dict, f)
 
 
 def get_2d_boxes(nusc,
