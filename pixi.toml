@@ -1,0 +1,67 @@
+[workspace]
+name = "vsrd_plus_plus"
+version = "1.0.0"
+description = "VSRD++ - Autolabeling for 3D Object Detection via Instance-Aware Volumetric Silhouette Rendering"
+channels = ["nvidia", "pytorch", "conda-forge"]
+platforms = ["linux-64"]
+channel-priority = "disabled"
+
+[dependencies]
+python = "3.10.*"
+
+# --- Deep learning ---
+pytorch = { version = "==1.13.0", build = "py3.10_cuda11.6_cudnn8.3.2_0" }
+pytorch-cuda = { version = "11.6.*" }
+torchvision = { version = "==0.14.0", build = "py310_cu116" }
+cudatoolkit-dev = "11.6.*"
+
+# --- Computer vision ---
+opencv = "4.7.*"
+pillow = "9.4.*"
+scikit-image = ">=0.22"
+kornia = ">=0.7"
+
+# --- Numerics ---
+numpy = "1.26.*"
+scipy = "1.11.*"
+numba = ">=0.58"
+
+# --- Data / ML utilities ---
+pandas = "2.1.*"
+pycocotools = ">=2.0"
+timm = ">=0.9"
+tensorboard = ">=2.15"
+matplotlib-base = ">=3.8"
+tqdm = "*"
+pyyaml = "*"
+inflection = "*"
+
+# --- Build / system ---
+gcc = "10.4.*"
+cython = "3.0.*"
+ninja = "*"
+mpi4py = "3.1.*"
+mkl = "==2023.2.0"
+
+[pypi-dependencies]
+vsrd_plus_plus = { path = ".", editable = true }
+kitti360scripts = "==1.0.0"
+yacs = ">=0.1"
+rich = ">=13.7"
+open3d = "*"
+# nerfacc is lazily imported only in the NerfAcc rendering path.
+# It requires a special pre-built wheel. Install manually after `pixi install`:
+#   pip install nerfacc==0.5.3+pt113cu116 \
+#     --find-links https://nerfacc-bucket.s3.us-west-2.amazonaws.com/whl/torch-1.13.0_cu116.html
+
+[tasks]
+# --- Setup ---
+install-nerfacc = "pip install nerfacc==0.5.3+pt113cu116 --find-links https://nerfacc-bucket.s3.us-west-2.amazonaws.com/whl/torch-1.13.0_cu116.html"
+
+# --- Stage 1: Optimization-based autolabeling ---
+train      = "python trainer/train_sequence_ddp.py"
+train-no-init = "python trainer/train_without_initial_sequence_ddp.py"
+train-ablation = "python trainer/train_sequence_ddp_ablations.py"
+infer      = "python trainer/inference.py"
+evaluate   = "python trainer/evaluation.py"
+train-ddp  = "bash trainer/scripts/DDP_RUN.sh"

@@ -21,7 +21,6 @@ VSRD++ is an advanced weakly supervised 3D object detection framework that exten
 - **Multi-View Optimization**: Scene-wise 3D bounding box rendering using multiple camera views
 - **Weak Supervision**: Only requires 2D segmentation masks and camera poses
 - **Robustness Enhancement**: MaskEroder functionality for simulating imperfect mask quality
-- **Complete Pipeline**: From data preprocessing to evaluation, all tools included
 
 ---
 
@@ -34,24 +33,43 @@ VSRD++ is an advanced weakly supervised 3D object detection framework that exten
 - [Detailed Workflow](#detailed-workflow)
 - [Configuration](#configuration)
 - [Evaluation](#evaluation)
-- [Advanced Features](#advanced-features)
-- [Sub-modules](#sub-modules)
 
 ---
 
 ## 🔧 Installation
 
-### 1. Setup Conda Environment
+This project uses [pixi](https://pixi.sh) for environment management. Pixi handles all conda and PyPI dependencies in a single lockfile — no manual conda/pip steps needed.
+
+### 1. Install pixi
 
 ```bash
-conda env create -f environment.yaml
-conda activate vsrd_plus_plus  # or your environment name
+curl -fsSL https://pixi.sh/install.sh | sh
 ```
 
-### 2. Install Repository
+### 2. Clone and set up the environment
 
 ```bash
-pip install -e .
+git clone git@github.com:Magicboomliu/VSRD_plus_plus.git
+cd VSRD_plus_plus
+
+# Resolve and install all dependencies (conda + PyPI)
+pixi install
+```
+
+This automatically installs Python 3.10, PyTorch 1.13 (CUDA 11.6), and all required packages into an isolated environment at `.pixi/envs/default/`.
+
+### 3. (Optional) Install nerfacc
+
+`nerfacc` is only needed for the NerfAcc-based rendering path. It requires a special pre-built wheel:
+
+```bash
+pixi run install-nerfacc
+```
+
+### 4. Verify installation
+
+```bash
+pixi run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
 ---
@@ -81,7 +99,6 @@ find <dataset_path> -type l -exec rm -v {} +
 ### 3. Create Soft Links for Training
 
 ```bash
-cd preprocessing/data_organization
 python soft_link.py \
     --soft_linked_folder $your_target_path \
     --source_root_folder $your_source_path
@@ -98,7 +115,7 @@ python update_sampled_image_filenames.py \
 # Update config files
 python update_configs.py \
     --root_path <dataset_path> \
-    --configs_path Optimized_Based/configs
+    --configs_path trainer/configs
 ```
 
 ---
@@ -133,7 +150,7 @@ VSRD++ follows a **two-stage pipeline**:
 ### Stage 1: Multi-View 3D Auto-Labeling Training
 
 ```bash
-cd Optimized_Based/scripts
+cd trainer/scripts
 sh DDP_RUN.sh
 ```
 
@@ -146,7 +163,7 @@ The script contains two training modes:
 For ablation studies with custom configurations:
 
 ```bash
-cd Optimized_Based/scripts
+cd trainer/scripts
 sh DDP_RUN_ROUND1_ABLATION.sh
 ```
 
@@ -166,7 +183,6 @@ Edit the script to configure:
 Generate dynamic masks using optical flow and depth consistency:
 
 ```bash
-cd preprocessing/dyanmic_static_filtering/
 
 # Step 1: Generate GT dynamic labels
 python dynamic_mask_gt_generataion.py \
@@ -197,7 +213,6 @@ python preprocess.py \
 Get initial 3D attributes (location, orientation, velocity) from LiDAR:
 
 ```bash
-cd preprocessing/Initial_Attributes
 python Get_Initial_Attributes.py
 ```
 
@@ -211,7 +226,6 @@ This step provides:
 Generate pseudo depth maps:
 
 ```bash
-cd preprocessing/scripts
 sh generate_pseudo_depth.sh
 ```
 
@@ -219,7 +233,7 @@ sh generate_pseudo_depth.sh
 
 #### 2.1 Training Configuration
 
-Edit config files in `Optimized_Based/configs/`:
+Edit config files in `trainer/configs/`:
 
 ```python
 # Enable dynamic modeling
@@ -257,7 +271,7 @@ python train_sequence_ddp.py \
 Run all evaluation steps in one command:
 
 ```bash
-cd Evaluations/make_predictions_scripts
+cd validator/make_predictions_scripts
 sh run_evaluation_pipeline.sh
 ```
 
@@ -272,7 +286,7 @@ This executes:
 **Step 1: Generate Predictions**
 
 ```bash
-cd Evaluations/make_predictions_scripts
+cd validator/make_predictions_scripts
 sh make_prediction.sh
 ```
 
@@ -307,10 +321,6 @@ sh get_iou.sh
 ```bash
 sh get_mAP.sh
 ```
-
-### Phase 4: Stage 2 - Monocular 3D Detection
-
-See [Monocular3D/README.md](Monocular3D/README.md) for detailed instructions.
 
 ---
 
@@ -350,7 +360,7 @@ python train_sequence_ddp.py \
 #### Projected 3D Boxes Visualization
 
 ```bash
-cd Evaluations/stage2_visualization_scripts
+cd validator/stage2_visualization_scripts
 sh visualization_projected3d.sh
 ```
 
@@ -392,25 +402,20 @@ python train_sequence_ddp.py \
 
 Detailed documentation for each module:
 
-- **[Optimized_Based/](Optimized_Based/README.md)**: Core training code for Stage 1
+- **[trainer/](trainer/README.md)**: Core training code for Stage 1
   - Multi-view 3D auto-labeling
   - Dynamic object modeling
   - Volumetric rendering
 
-- **[preprocessing/](preprocessing/README.md)**: Data preprocessing pipeline
   - Dynamic/static classification
   - Optical flow and depth estimation
   - Initial attribute estimation
 
-- **[Evaluations/](Evaluations/README.md)**: Evaluation tools and metrics
+- **[validator/](validator/README.md)**: Evaluation tools and metrics
   - Prediction generation
   - KITTI format conversion
   - IoU and mAP calculation
   - Visualization tools
-
-- **[Monocular3D/](Monocular3D/README.md)**: Stage 2 monocular 3D detection
-  - Data preprocessing for monocular detectors
-  - Training scripts for WeakM3D, MonoFlex, MonoDeTR
 
 ---
 
@@ -425,7 +430,7 @@ Detailed documentation for each module:
 ### Configuration Example
 
 ```python
-# In Optimized_Based/configs/train_config_*.py
+# In trainer/configs/train_config_*.py
 
 # Dynamic modeling settings
 _C.TRAIN.USE_RDF_MODELING = True

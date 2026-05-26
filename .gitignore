@@ -1,22 +1,45 @@
-.*
-_*
-/logs
-/ckpts
-/images
-/datasets
-*egg-info*
-!.gitattributes
-!.gitignore
-!.gitmodules
-!__init__.py
-!.pre-commit*
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*egg-info/
+dist/
+build/
+.eggs/
+
+# ── Pixi ────────────────────────────────────────────────────────────────────
+.pixi/
+pixi.lock
+
+# ── Model weights & checkpoints ─────────────────────────────────────────────
 *.pt
 *.pth
 *.safetensors
-*.json
-/Optimized_Based/evaluation_results
-/Optimized_Based/results_visualizations
-/Optimized_Based/ckpts
-/Optimized_Based/logs
-/Optimized_Based/debugs
-*.txt
+*.ckpt
+*.bin
+
+# ── Logs & outputs ──────────────────────────────────────────────────────────
+/logs/
+/ckpts/
+/trainer/logs/
+/trainer/ckpts/
+/trainer/debugs/
+/trainer/evaluation_results/
+/trainer/results_visualizations/
+
+# ── Data ────────────────────────────────────────────────────────────────────
+/datasets/
+/images/
+
+# ── Misc ────────────────────────────────────────────────────────────────────
+.DS_Store
+*.swp
+*.swo
+
+# ── Keep these dotfiles ──────────────────────────────────────────────────────
+!.gitattributes
+!.gitignore
+!.gitmodules
+!.pre-commit-config.yaml
