@@ -1,8 +1,69 @@
-from .train_config import _C as conf_train
-from .inference_config import _C as conf_val
+import json
+import os
+import types
 
-from .train_config_sequence_06 import _C as conf_train_sync06
-from .train_config_ddp_debug import _C as conf_train_sync06_debug
+_CONFIGS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-__all__ = ["cfg"]
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge override into base (override wins on conflict)."""
+    result = base.copy()
+    for key, val in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
+
+
+def _to_namespace(d):
+    """Recursively convert a dict to a SimpleNamespace for dot-access."""
+    if isinstance(d, dict):
+        return types.SimpleNamespace(**{k: _to_namespace(v) for k, v in d.items()})
+    if isinstance(d, list):
+        return [_to_namespace(v) for v in d]
+    return d
+
+
+def load_config(name: str):
+    """
+    Load a merged config: base.json deep-merged with <name>.json.
+
+    Args:
+        name: config name without extension, e.g. "sequence_00", "debug",
+              "ablation_full", "inference".  Also accepts bare sequence IDs
+              like "00", "02" etc. for convenience.
+
+    Returns:
+        A nested SimpleNamespace so cfg.TRAIN.DATASET.FILENAMES etc. work.
+        TRAIN.CONFIG is auto-set to the configs directory path.
+    """
+    # Allow bare sequence IDs like "00" as shorthand for "sequence_00"
+    if len(name) == 2 and name.isdigit():
+        name = f"sequence_{name}"
+
+    base_path = os.path.join(_CONFIGS_DIR, "base.json")
+    # Support sub-directory paths like "SPLITS64/split_sub"
+    override_path = os.path.join(_CONFIGS_DIR, f"{name}.json")
+
+    with open(base_path) as f:
+        cfg = json.load(f)
+
+    if os.path.exists(override_path):
+        with open(override_path) as f:
+            overrides = json.load(f)
+        cfg = _deep_merge(cfg, overrides)
+    else:
+        raise FileNotFoundError(
+            f"Config '{name}' not found at {override_path}.\n"
+            f"Available configs: {[p[:-5] for p in os.listdir(_CONFIGS_DIR) if p.endswith('.json') and p != 'base.json']}"
+        )
+
+    # Auto-set TRAIN.CONFIG so ckpt/log paths are derived correctly
+    cfg["TRAIN"]["CONFIG"] = _CONFIGS_DIR
+
+    return _to_namespace(cfg)
+
+
+# Pre-loaded config for inference.py / evaluation.py (legacy import pattern)
+conf_val = load_config("inference")

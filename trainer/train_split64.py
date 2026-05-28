@@ -110,7 +110,8 @@ def encode_orientation(rotation_matrices):
 
 
 def main(args=None):
-    from trainer.configs.SPLITS64.train_config_sub_00 import _C as my_conf_train
+    from trainer.configs import load_config
+    my_conf_train = load_config("SPLITS64/split_sub")
     N_SPLITS = 64
     FIND_FLAG = False
     for i in range(N_SPLITS):

@@ -1,0 +1,10 @@
+{
+  "TRAIN": {
+    "DATASET": {
+      "FILENAMES": [
+        "/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/filenames/R50-N16-M128-B16/2013_05_28_drive_04_sync/sampled_image_filenames.txt"
+      ]
+    },
+    "DYNAMIC_LABELS_PATH": "/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/dynamic_attributes_est/sync04/dynamic_mask.txt"
+  }
+}

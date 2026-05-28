@@ -1,0 +1,9 @@
+{
+  "TRAIN": {
+    "MODEL_TYPE": "VSRDPP_FULL",
+    "DATASET": {
+      "FILENAMES": ["/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/train_tsubame_filenames/filename_split64/sub_0.txt"]
+    },
+    "DYNAMIC_LABELS_PATH": "/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/train_tsubame_filenames/dynamic_split64/sub_0.txt"
+  }
+}

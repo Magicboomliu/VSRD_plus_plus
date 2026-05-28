@@ -1,0 +1,81 @@
+{
+  "TRAIN": {
+    "SEED": 42,
+    "MODEL_TYPE": "with_pseudo_depth_ssl_igevstereo",
+    "DATASET": {
+      "BATCH_SIZE": 1,
+      "FILENAMES": [],
+      "CLASS_NAMES": ["car"],
+      "NUMS_OF_WORKERS": 4,
+      "NUM_SOURCE_FRAMES": 16,
+      "RECTIFICATION": true,
+      "TARGET_TRANSFORMS": {
+        "IMAGE_SIZE": [376, 1408],
+        "MIN_MASK_AREA_01": 1,
+        "MIN_MASK_AREA_02": 128,
+        "MIN_BOX_SIZE": 16
+      },
+      "SOURCE_TRANSFORMS": {
+        "IMAGE_SIZE": [376, 1408],
+        "MIN_MASK_AREA_01": 1,
+        "MIN_MASK_AREA_02": 1,
+        "MIN_BOX_SIZE": 1
+      }
+    },
+    "DDP": {
+      "LAUNCHER": "torchrun",
+      "BACKEND": "nccl",
+      "NUM_DEVICES_PER_PROCESS": 1,
+      "PORT": 1209
+    },
+    "MULTIPROCESSING": {
+      "START_METHOD": "spawn"
+    },
+    "VOLUME_RENDERING": {
+      "DISTANCE_RANGE": [0.0, 100.0],
+      "MAX_SDF_STD_DEVIATION": 1.0,
+      "MAX_SDF_UNION_TEMPERATURE": 1.0,
+      "MIN_SDF_STD_DEVIATION": 0.1,
+      "MIN_SDF_UNION_TEMPERATURE": 0.1,
+      "NUM_COARSE_SAMPLES": 100,
+      "NUM_FINE_SAMPLES": 100,
+      "NUM_RAYS": 1000
+    },
+    "LOSS_WEIGHT": {
+      "EIKONAL_LOSS": 0.01,
+      "IOU_PROJECTION_LOSS": 0.1,
+      "L1_PROJECTION_LOSS": 1.0,
+      "PHOTOMETRIC_LOSS": 0.0,
+      "RADIANCE_LOSS": 0.0,
+      "SILHOUETTE_LOSS": 1.0
+    },
+    "LOGGING": {
+      "CKPT_INTERVALS": 500,
+      "EVAL_INTERVALS": 1,
+      "IMAGE_INTERVALS": 500,
+      "SCALAR_INTERVALS": 50
+    },
+    "OPTIMIZATION_NUM_STEPS": 3000,
+    "OPTIMIZATION_WARMUP_STEPS": -1,
+    "OPTIMIZATION_RESIDUAL_BOX_STEPS": 1000,
+    "USE_RDF_MODELING": true,
+    "USE_DYNAMIC_MASK": true,
+    "USE_DYNAMIC_MODELING": true,
+    "DYNAMIC_MODELING_TYPE": "vector_velocity",
+    "DYNAMIC_LABELS_PATH": ""
+  },
+  "EVAL": {
+    "SURFACE_RENDERING": {
+      "BOUNDING_RADIUS": 100.0,
+      "convergence_criteria": 0.01,
+      "NUM_ITERATIONS": 1000,
+      "NUM_RAYS": 100,
+      "PATCH_SIZE": [11, 11]
+    },
+    "MODELS_PATH": "",
+    "RENDERING_SETINGS": {
+      "rendered_mask_flag": true,
+      "use_residual_mask": true
+    }
+  }
+}
