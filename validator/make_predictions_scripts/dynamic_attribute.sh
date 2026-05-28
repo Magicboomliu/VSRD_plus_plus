@@ -1,7 +1,7 @@
 Dynamic_Atrribute(){
 cd ..
 cd tools/Dyanmic_Attribute
-ROOT_DIRNAME="/data/dataset/KITTI/KITTI360_For_Docker"
+ROOT_DIRNAME="/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload"
 CKPT_DIRNAME="/home/Journals2025/VSRD_plus_plus/trainer/ckpts/Prefect_GT_Masks"
 JSON_FOLDERNAME="predictions"
 OUTPUT_LABELNAME='GT_with_dynamic'

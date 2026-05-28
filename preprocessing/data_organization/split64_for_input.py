@@ -114,7 +114,7 @@ if __name__=="__main__":
 
     
     # filenames path    
-    sample_filename_root_folder = os.path.join(args.root_folder,"est_dynamic_list")
+    sample_filename_root_folder = os.path.join(args.root_folder,"dynamic_attributes_est")
     sub_folder_name_list = ['sync00','sync02','sync03','sync04','sync05',
                             'sync06','sync07','sync09','sync10']
     

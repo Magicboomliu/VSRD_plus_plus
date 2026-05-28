@@ -8,10 +8,10 @@ Run_Evaluation_Pipeline(){
     cd tools
     
     # Configuration
-    ROOT_DIRNAME="/data/dataset/KITTI/KITTI360_For_Docker"
+    ROOT_DIRNAME="/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload"
     CKPT_DIRNAME="/home/Journals2025/VSRD_plus_plus/trainer/ckpts/with_pseudo_depth_ssl_igevstereo"
     CKPT_FILENAME="step_2999.pt"
-    DYNAMIC_DIRNAME="/data/dataset/KITTI/KITTI360_For_Docker/est_dynamic_list/"
+    DYNAMIC_DIRNAME="/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/dynamic_attributes_est/"
     INPUT_MODEL_TYPE="velocity_with_init"
     SAVED_PSEUDO_FOLDER_PATH="predictions"
     SPLIT_DIRNAME="R50-N16-M128-B16"
@@ -24,7 +24,7 @@ Run_Evaluation_Pipeline(){
     CLASS_NAMES="car"
     # Output folder for Step4 (KITTI3D dataset structure)
     # If empty, will auto-generate to {ROOT_DIRNAME}/KITTI3D_Dataset/{CKPT_BASENAME}
-    # Example: "/data/dataset/KITTI/KITTI360_For_Docker/KITTI3D_Dataset/with_pseudo_depth_ssl_igevstereo"
+    # Example: "/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/KITTI3D_Dataset/with_pseudo_depth_ssl_igevstereo"
     OUTPUT_FOLDER="/home/Journals2025/VSRD_plus_plus/Round1/Seg_Ablations/prefect_seg"
     
     # Run the unified pipeline

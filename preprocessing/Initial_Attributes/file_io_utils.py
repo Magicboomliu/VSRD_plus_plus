@@ -22,7 +22,7 @@ def read_pickle_file(pickle_file_path):
 def get_depth_filename(image_filename):
     annotation_filename = (
         image_filename
-        .replace("data_2d_raw", "IGEVStereoSSL")
+        .replace("data_2d_raw", "pseudo_depth_ssl")
     )
     return annotation_filename
 

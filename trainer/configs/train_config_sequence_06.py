@@ -7,7 +7,7 @@ _C.TRAIN.SEED=42
 
 
 _C.TRAIN.DATASET.BATCH_SIZE=1
-_C.TRAIN.DATASET.FILENAMES = ["/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/filenames/R50-N16-M128-B16/2013_05_28_drive_0006_sync/sampled_image_filenames.txt"]
+_C.TRAIN.DATASET.FILENAMES = ["/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/filenames/R50-N16-M128-B16/2013_05_28_drive_0006_sync/sampled_image_filenames.txt"]
 _C.TRAIN.DATASET.CLASS_NAMES = ['car']
 _C.TRAIN.DATASET.NUMS_OF_WORKERS= 4
 _C.TRAIN.DATASET.NUM_SOURCE_FRAMES=16
@@ -88,7 +88,7 @@ _C.TRAIN.USE_DYNAMIC_MODELING=True
 
 
 # Just for testing
-_C.TRAIN.DYNAMIC_LABELS_PATH="/gs/bs/tga-lab_otm/zliu/VSRD_PP_Sync/est_dynamic_list/sync06/dynamic_mask.txt"
+_C.TRAIN.DYNAMIC_LABELS_PATH="/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/dynamic_attributes_est/sync06/dynamic_mask.txt"
 
 # selective from 'mlp', 'vector_velocity','scalar_velocity'
 _C.TRAIN.DYNAMIC_MODELING_TYPE='vector_velocity'

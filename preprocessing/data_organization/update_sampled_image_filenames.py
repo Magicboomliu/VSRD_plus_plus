@@ -160,8 +160,8 @@ if __name__=="__main__":
         
     # for dynamic mask
 
-    root_folder = "{}/est_dynamic_list/".format(gt_original_root_folder)
-    changed_root_folder = "{}/est_dynamic_list/".format(changed_root_folder_root)
+    root_folder = "{}/dynamic_attributes_est/".format(gt_original_root_folder)
+    changed_root_folder = "{}/dynamic_attributes_est/".format(changed_root_folder_root)
     
 
     for sub_folder in tqdm(sorted(os.listdir(root_folder))):

@@ -51,7 +51,7 @@ if __name__ == "__main__":
         "data_poses",
         "image_data/data_2d_raw",
         "pseudo_depth_left_NMRF",
-        "IGEVStereoSSL"
+        "pseudo_depth_ssl"
     ]
 
     # Create soft links for each folder

@@ -94,7 +94,7 @@ if __name__=="__main__":
 
 
     # filenames path
-    sample_filename_root_folder = os.path.join(args.root_folder,"est_dynamic_list/")
+    sample_filename_root_folder = os.path.join(args.root_folder,"dynamic_attributes_est/")
     sub_folder_name_list = ['sync03','sync07']
     saved_folder = os.path.join(args.root_folder,args.output_folder_name)
     os.makedirs(saved_folder,exist_ok=True)

@@ -5,7 +5,7 @@ _C.TRAIN.DATASET = CN()
 
 _C.TRAIN.SEED=42
 _C.TRAIN.DATASET.BATCH_SIZE=1
-_C.TRAIN.DATASET.FILENAMES = ["/media/zliu/data12/dataset/VSRD_PP_Sync/train_tsubame_filenames/filename_split64/sub_0.txt"]
+_C.TRAIN.DATASET.FILENAMES = ["/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/train_tsubame_filenames/filename_split64/sub_0.txt"]
 _C.TRAIN.DATASET.CLASS_NAMES = ['car']
 _C.TRAIN.DATASET.NUMS_OF_WORKERS= 4
 _C.TRAIN.DATASET.NUM_SOURCE_FRAMES=16
@@ -83,6 +83,6 @@ _C.TRAIN.USE_DYNAMIC_MASK=True
 _C.TRAIN.USE_DYNAMIC_MODELING=True
 
 # Just for testing
-_C.TRAIN.DYNAMIC_LABELS_PATH="/media/zliu/data12/dataset/VSRD_PP_Sync/train_tsubame_filenames/dynamic_split64/sub_0.txt"
+_C.TRAIN.DYNAMIC_LABELS_PATH="/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/train_tsubame_filenames/dynamic_split64/sub_0.txt"
 # selective from 'mlp', 'vector_velocity','scalar_velocity'
 _C.TRAIN.DYNAMIC_MODELING_TYPE='vector_velocity'

@@ -3,7 +3,7 @@ cd ..
 cd tools/Stage2Visualizations/
 ROOT_FOLDER="/home/Journals2025/VSRD_plus_plus/Round1/Seg_Ablations/prefect_seg/"
 PD_FOLDER="/home/Journals2025/VSRD_plus_plus/Round1/Seg_Ablations/prefect_seg/training/label_est/"
-ANNOTATION_FOLDER="/data/dataset/KITTI/KITTI360_For_Docker/annotations/"
+ANNOTATION_FOLDER="/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/annotations/"
 OPTIONS="pd_only" # selected from "pd_only" and "pd_gt"
 # Mask erode ratio (0.0 = disabled, 0.05 = 5%, 0.10 = 10%)
 ERODE_RATIO=0.05

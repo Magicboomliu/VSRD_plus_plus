@@ -75,7 +75,7 @@ if __name__=="__main__":
     for name in input_list:
         dynamic_mask_list_path = "/data3/VSRD_PP_Sync/estimated_dynamic_static_filenames/sync{}/dynamic_mask.txt".format(name)
         sample_group_list_path = "/data3/VSRD_PP_Sync/filenames/R50-N16-M128-B16/2013_05_28_drive_00{}_sync/sampled_image_filenames.txt".format(name)
-        output_dynamic_mask_path = "/data3/VSRD_PP_Sync/est_dynamic_list/sync{}/dynamic_mask.txt".format(name)
+        output_dynamic_mask_path = "/data3/VSRD_PP_Sync/dynamic_attributes_est/sync{}/dynamic_mask.txt".format(name)
         
         
         process_the_data(dynamic_mask_list_path=dynamic_mask_list_path,

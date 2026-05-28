@@ -7,7 +7,7 @@ _C.TRAIN.DATASET = CN()
 
 _C.TRAIN.DATASET.BATCH_SIZE=1
 
-_C.TRAIN.DATASET.FILENAMES = ["/media/zliu/data12/dataset/KITTI/VSRD_Format/filenames/R50-N16-M128-B16/dynamic_example/example_0000009463.txt"]
+_C.TRAIN.DATASET.FILENAMES = ["/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/filenames/R50-N16-M128-B16/dynamic_example/example_0000009463.txt"]
 _C.TRAIN.DATASET.CLASS_NAMES = ['car']
 _C.TRAIN.DATASET.NUMS_OF_WORKERS= 4
 _C.TRAIN.DATASET.NUM_SOURCE_FRAMES=16

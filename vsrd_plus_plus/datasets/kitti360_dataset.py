@@ -344,7 +344,7 @@ class KITTI360Dataset(torch.utils.data.Dataset):
 
 if __name__=="__main__":
     
-    filenames = ["/data3/VSRD_PP_Sync/filenames/R50-N16-M128-B16/dynamic_example2/sampled_image_filenames.txt"]
+    filenames = ["/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/filenames/R50-N16-M128-B16/2013_05_28_drive_0000_sync/sampled_image_filenames.txt"]
     class_names = ['car']
     
     dataset = KITTI360Dataset(filenames=filenames,
