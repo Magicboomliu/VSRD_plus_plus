@@ -49,6 +49,7 @@ preprocessing/optical_flow_estimation/**/ckpts/
 .DS_Store
 *.swp
 *.swo
+*.gif
 
 # ── Keep these dotfiles ──────────────────────────────────────────────────────
 !.gitattributes
