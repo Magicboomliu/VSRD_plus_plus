@@ -148,6 +148,7 @@ def main(args=None):
     
     # get the dataset names
     train_filename_list = my_conf_train.TRAIN.DATASET.FILENAMES
+    dataset_root = my_conf_train.TRAIN.DATASET.ROOT
     class_names = my_conf_train.TRAIN.DATASET.CLASS_NAMES
     num_of_workers = my_conf_train.TRAIN.DATASET.NUMS_OF_WORKERS
     num_source_frames = my_conf_train.TRAIN.DATASET.NUM_SOURCE_FRAMES # 16 by default
@@ -208,7 +209,8 @@ def main(args=None):
                               num_source_frames=num_source_frames,
                               target_transforms=target_transforms,
                               source_transforms=source_transforms,
-                              rectification=dataset_rectification)
+                              rectification=dataset_rectification,
+                              dataset_root=dataset_root)
 
     # ====================================================================================================
     # loaders
@@ -264,6 +266,8 @@ def main(args=None):
                     for content in dynamic_raw_contents:
                         content = content.strip()
                         current_returned_ids,current_returned_filename,current_return_labels = content.split(" ")
+                        if not os.path.isabs(current_returned_filename):
+                            current_returned_filename = os.path.join(dataset_root, current_returned_filename)
                         if current_returned_filename == image_filename:
                             dynamic_labels_for_target_view['instance_ids'] = current_returned_ids
                             dynamic_labels_for_target_view["dynamic_labels"] = current_return_labels

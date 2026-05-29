@@ -78,6 +78,7 @@ def Inference():
     
     # get the datasets
     current_filanems = conf_val.TRAIN.DATASET.FILENAMES
+    dataset_root = conf_val.TRAIN.DATASET.ROOT
     class_names = conf_val.TRAIN.DATASET.CLASS_NAMES
     num_of_workers = conf_val.TRAIN.DATASET.NUMS_OF_WORKERS
     num_source_frames = conf_val.TRAIN.DATASET.NUM_SOURCE_FRAMES
@@ -125,7 +126,8 @@ def Inference():
                               num_source_frames=num_source_frames,
                               target_transforms=target_transforms,
                               source_transforms=source_transforms,
-                              rectification=dataset_rectification)
+                              rectification=dataset_rectification,
+                              dataset_root=dataset_root)
 
 
 
@@ -440,7 +442,7 @@ def Inference():
                 dynamic_raw_contents = read_text_lines(conf_val.TRAIN.DYNAMIC_LABELS_PATH)
                 for content in dynamic_raw_contents:
                     content = content.strip()
-                    current_returned_dict = read_complex_strings(content)
+                    current_returned_dict = read_complex_strings(content, dataset_root=dataset_root)
                     if current_returned_dict['filename'] == image_filename:
                         dynamic_labels_for_target_view['instance_ids'] = current_returned_dict['instance_ids']
                         dynamic_labels_for_target_view["dynamic_labels"] = current_returned_dict['labels']

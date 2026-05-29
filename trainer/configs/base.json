@@ -3,6 +3,7 @@
     "SEED": 42,
     "MODEL_TYPE": "with_pseudo_depth_ssl_igevstereo",
     "DATASET": {
+      "ROOT": "/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload",
       "BATCH_SIZE": 1,
       "FILENAMES": [],
       "CLASS_NAMES": ["car"],

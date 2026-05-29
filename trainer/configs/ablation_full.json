@@ -3,9 +3,9 @@
     "MODEL_TYPE": "VSRDPP_FULL",
     "DATASET": {
       "FILENAMES": [
-        "/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/train_ablation_filenames/train_ablation_filenames.txt"
+        "train_ablation_filenames/train_ablation_filenames.txt"
       ]
     },
-    "DYNAMIC_LABELS_PATH": "/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/train_ablation_filenames/train_ablation_dynamic_mask.txt"
+    "DYNAMIC_LABELS_PATH": "train_ablation_filenames/train_ablation_dynamic_mask.txt"
   }
 }

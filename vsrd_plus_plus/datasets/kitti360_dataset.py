@@ -61,13 +61,14 @@ class KITTI360Dataset(torch.utils.data.Dataset):
                            BoxSizeFilter(min_box_size=1),
                            SoftRasterizer()],
         rectification=True,
+        dataset_root="",
     ):
         
         super().__init__()
 
         self.image_filenames = [] # save the image list
         self.image_blacklist = set()
-        
+        self.dataset_root = dataset_root
 
         for filename in filenames:
             with open(filename) as file:
@@ -75,6 +76,8 @@ class KITTI360Dataset(torch.utils.data.Dataset):
 
                     # 3 colums: 1 is the instance id                     
                     _, target_image_filename, source_relative_indices = line.strip().split(" ")
+                    if dataset_root and not os.path.isabs(target_image_filename):
+                        target_image_filename = os.path.join(dataset_root, target_image_filename)
                     source_relative_indices = list(map(int, source_relative_indices.split(",")))
                     self.image_filenames.append((target_image_filename, source_relative_indices))
 

@@ -58,6 +58,10 @@ open3d = "*"
 # --- Setup ---
 install-nerfacc = "pip install nerfacc==0.5.3+pt113cu116 --find-links https://nerfacc-bucket.s3.us-west-2.amazonaws.com/whl/torch-1.13.0_cu116.html"
 
+# --- Tests ---
+test = "pytest tests/ -v"
+test-data = "pytest tests/test_data_paths.py -v"
+
 # --- Stage 1: Optimization-based autolabeling ---
 train      = "python trainer/train_sequence_ddp.py"
 train-no-init = "python trainer/train_without_initial_sequence_ddp.py"

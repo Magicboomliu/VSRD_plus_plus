@@ -62,6 +62,17 @@ def load_config(name: str):
     # Auto-set TRAIN.CONFIG so ckpt/log paths are derived correctly
     cfg["TRAIN"]["CONFIG"] = _CONFIGS_DIR
 
+    # Resolve relative paths using DATASET.ROOT so callers always get absolute paths.
+    dataset_root = cfg["TRAIN"]["DATASET"].get("ROOT", "")
+    if dataset_root:
+        cfg["TRAIN"]["DATASET"]["FILENAMES"] = [
+            p if os.path.isabs(p) else os.path.join(dataset_root, p)
+            for p in cfg["TRAIN"]["DATASET"].get("FILENAMES", [])
+        ]
+        dynamic_path = cfg["TRAIN"].get("DYNAMIC_LABELS_PATH", "")
+        if dynamic_path and not os.path.isabs(dynamic_path):
+            cfg["TRAIN"]["DYNAMIC_LABELS_PATH"] = os.path.join(dataset_root, dynamic_path)
+
     return _to_namespace(cfg)
 
 
