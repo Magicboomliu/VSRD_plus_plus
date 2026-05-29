@@ -13,12 +13,24 @@ build/
 .pixi/
 pixi.lock
 
-# ── Model weights & checkpoints ─────────────────────────────────────────────
+# ── Model weights & checkpoints (large files — download separately, never commit) ──
 *.pt
 *.pth
 *.safetensors
 *.ckpt
 *.bin
+*.npy
+*.npz
+
+# Tiny LEAStereo NAS architecture descriptors (not data dumps — keep in repo)
+!preprocessing/disparity_estimation/Leastereo/run/**/architecture/*.npy
+
+# Explicit checkpoint directories
+preprocessing/disparity_estimation/WAFT-Stereo/ckpts/
+preprocessing/disparity_estimation/Leastereo/run/Kitti15/
+preprocessing/disparity_estimation/Leastereo/run/**/best.pth
+preprocessing/optical_flow_estimation/**/ckpts/
+**/.cache/huggingface/
 
 # ── Logs & outputs ──────────────────────────────────────────────────────────
 /logs/

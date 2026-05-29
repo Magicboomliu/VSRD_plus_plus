@@ -271,32 +271,45 @@ from tqdm import tqdm
 if __name__ == "__main__":
     root_folder = opt.root_folder
     saved_name = opt.saved_name
-    
-    sub_folders = os.listdir(root_folder)
-    all_folders_abs = sorted([os.path.join(root_folder,f) for f in sub_folders])
-    sub_folders_abs_sub1 = sorted([os.path.join(root_folder,f) for f in sub_folders])[:4]
-    sub_folders_abs_sub2 =  sorted([os.path.join(root_folder,f) for f in sub_folders])[4:]
-    current_processed_sub_folder = all_folders_abs
-    idx = 0
-    for sub_folder_name in current_processed_sub_folder:
-        
-        print(" Begin Processed {}/{}".format(idx+1,len(current_processed_sub_folder)))
-        left_image_folder = os.path.join(sub_folder_name,'image_00/data_rect')
-        right_image_folder = os.path.join(sub_folder_name,"image_01/data_rect")
-        left_images_fname_lists = [os.path.join(left_image_folder,f) for f in os.listdir(left_image_folder)]
-        
-        for fname in tqdm(left_images_fname_lists):
-            
-            left_fname = fname
-            right_fname = left_fname.replace("image_00","image_01")
-            predicted_disparity = test_kitti(leftname=left_fname,rightname=right_fname)
-            pd_depth = Convert_Disparity_to_Depth(disparity=predicted_disparity)
+    skip_existing = bool(opt.skip_existing)
 
-            saved_depth_name = left_fname.replace("data_2d_raw",saved_name)
-            saved_baseline_name = os.path.basename(saved_depth_name)
-            saved_depth_name_folder = saved_depth_name[:-len(saved_baseline_name)]
-            os.makedirs(saved_depth_name_folder,exist_ok=True)
-            
-            skimage.io.imsave(saved_depth_name,(pd_depth*256).astype(np.uint16))
+    # root_folder points to a single sequence dir (contains image_00/ and image_01/)
+    left_image_folder = os.path.join(root_folder, 'image_00/data_rect')
+    right_image_folder = os.path.join(root_folder, 'image_01/data_rect')
+
+    if not os.path.isdir(left_image_folder) or not os.path.isdir(right_image_folder):
+        raise RuntimeError(
+            f"Expected image_00/data_rect and image_01/data_rect inside {root_folder}"
+        )
+
+    left_images_fname_lists = sorted(
+        [os.path.join(left_image_folder, f)
+         for f in os.listdir(left_image_folder) if f.endswith('.png')]
+    )
+
+    skipped = 0
+    for fname in tqdm(left_images_fname_lists):
+        left_fname = fname
+        right_fname = left_fname.replace("image_00", "image_01")
+
+        saved_depth_name = left_fname.replace("data_2d_raw", saved_name)
+        saved_baseline_name = os.path.basename(saved_depth_name)
+        saved_depth_name_folder = saved_depth_name[:-len(saved_baseline_name)]
+
+        if skip_existing and os.path.exists(saved_depth_name):
+            skipped += 1
+            continue
+
+        if not os.path.exists(right_fname):
+            print(f"WARNING: right image not found, skipping: {right_fname}")
+            continue
+
+        predicted_disparity = test_kitti(leftname=left_fname, rightname=right_fname)
+        pd_depth = Convert_Disparity_to_Depth(disparity=predicted_disparity)
+
+        os.makedirs(saved_depth_name_folder, exist_ok=True)
+        skimage.io.imsave(saved_depth_name, (pd_depth * 256).astype(np.uint16))
+
+    print(f"Done. Skipped {skipped} already-existing frames.")
         
 

@@ -1,0 +1,57 @@
+[workspace]
+name = "waft-stereo"
+version = "0.1.0"
+description = "WAFT-Stereo: Warping-Alone Field Transforms for Stereo Matching"
+channels = ["pytorch", "nvidia", "conda-forge"]
+platforms = ["linux-64"]
+# Allow dependencies to be satisfied from any channel regardless of priority order.
+# This lets libjpeg-turbo (and similar system libs) come from conda-forge even though
+# the pytorch channel sits higher in the list.
+channel-priority = "disabled"
+
+[dependencies]
+python = "3.12.*"
+
+# PyTorch stack – edit pytorch-cuda to match your driver (run `nvidia-smi` to check)
+pytorch = { version = ">=2.0", channel = "pytorch" }
+torchvision = { version = ">=0.15", channel = "pytorch" }
+pytorch-cuda = { version = "11.8.*", channel = "pytorch" }
+
+[pypi-dependencies]
+# ML / model utilities
+timm = ">=0.9"
+einops = ">=0.6"
+peft = ">=0.6"
+wandb = ">=0.15"
+
+# Config and logging
+PyYAML = ">=6.0"
+yacs = ">=0.1.8"
+tabulate = ">=0.9"
+termcolor = ">=2.0"
+
+# Data loading and image I/O
+numpy = ">=1.24"
+Pillow = ">=9.0"
+opencv-python = ">=4.8"
+imageio = ">=2.28"
+h5py = ">=3.8"
+
+# Visualization
+matplotlib = ">=3.7"
+
+setuptools = ">=68.0"
+# Optional: flash-attention acceleration used by thirdparty/DepthAnythingV2
+xformers = ">=0.0.22"
+# open3d (point-cloud visualisation in demo/) is NOT listed here because its
+# published wheels require glibc >=2.31 (manylinux_2_31) while many servers
+# still ship glibc 2.28.  Install it manually if your system supports it:
+#   pixi run pip install open3d
+
+# ---------------------------------------------------------------------------
+# Convenience tasks  (run with: pixi run <task-name>)
+# ---------------------------------------------------------------------------
+[tasks]
+infer = "python infer.py --data-dir Data_Examples --config-file configs/Real/kitti.yaml --ckpt ckpts/Real/DAv2L-5.pth --fx 552.554261 --baseline 0.5942 --depth-min 0 --depth-max 80"
+# Generate pseudo_depth_ssl for KITTI360 (run from WAFT-Stereo dir)
+gen-pseudo-depth = "PYTHONPATH=../../.. python -m preprocessing.apis.depth_estimator"

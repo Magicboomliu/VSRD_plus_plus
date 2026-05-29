@@ -62,6 +62,12 @@ install-nerfacc = "pip install nerfacc==0.5.3+pt113cu116 --find-links https://ne
 test = "pytest tests/ -v"
 test-data = "pytest tests/test_data_paths.py -v"
 
+# --- Preprocessing ---
+# Generate pseudo depth maps for all sequences (requires Kitti15 weights — see script header)
+gen-depth = "bash preprocessing/scripts/generate_pseudo_depth.sh"
+# Generate depth for a single sequence, e.g.:  pixi run gen-depth-seq 0006
+gen-depth-seq = "bash preprocessing/scripts/generate_pseudo_depth.sh"
+
 # --- Stage 1: Optimization-based autolabeling ---
 train      = "python trainer/train_sequence_ddp.py"
 train-no-init = "python trainer/train_without_initial_sequence_ddp.py"

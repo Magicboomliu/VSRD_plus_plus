@@ -29,8 +29,12 @@ def obtain_predict_args():
     parser.add_argument('--net_arch_mat', default=None, type=str)
     parser.add_argument('--cell_arch_mat', default=None, type=str)
     
-    parser.add_argument("--root_folder",default=None,type=str)
-    parser.add_argument("--saved_name",default=None,type=str)
+    parser.add_argument("--root_folder", default=None, type=str,
+                        help="path to a single sequence dir (contains image_00/ image_01/)")
+    parser.add_argument("--saved_name", default=None, type=str,
+                        help="output dirname to replace 'data_2d_raw' in the saved path")
+    parser.add_argument("--skip_existing", default=0, type=int,
+                        help="if 1, skip frames whose output file already exists")
     
 
     args = parser.parse_args()

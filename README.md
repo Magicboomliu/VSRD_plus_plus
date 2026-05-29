@@ -70,53 +70,90 @@ pixi run install-nerfacc
 
 ```bash
 pixi run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+pixi run test-data   # check dataset paths (after setting DATASET.ROOT)
 ```
+
+> **Note:** Large model weights (`.pth`, ~GB each) are listed in `.gitignore` and must be downloaded separately — WAFT-Stereo, MeMFlow, LEAStereo, etc.
 
 ---
 
 ## 📦 Data Preparation
 
+### Dataset layout
+
+Point `trainer/configs/base.json` → `TRAIN.DATASET.ROOT` to your KITTI360 root. Expected structure:
+
+```
+KITTI360_For_Upload/
+├── data_2d_raw/              # RGB images (KITTI360)
+├── annotations/              # 2D instance masks
+├── filenames/                # Sampled frame lists (.txt, relative paths inside)
+├── pseudo_depth_ssl/         # Legacy pseudo depth (LEAStereo, optional)
+├── pseudo_depth_ssl_waft_stereo/  # WAFT-Stereo pseudo depth (recommended)
+└── dynamic_attributes_est/   # Dynamic object labels (generated)
+```
+
+Filenames inside `.txt` files use **relative paths**; only `DATASET.ROOT` in config needs to change when moving machines.
+
+Verify paths before training:
+
+```bash
+pixi run test-data
+```
+
 ### 1. Download KITTI360 Dataset
 
-Download the custom KITTI360 dataset from [Google Drive](https://drive.google.com/file/d/1syBPCdU0Hs2AWgQfsPohqMFXNEpM3eWV/view?usp=sharing) or use curl:
+Download from [Google Drive](https://drive.google.com/file/d/1syBPCdU0Hs2AWgQfsPohqMFXNEpM3eWV/view?usp=sharing) or use curl:
 
 ```bash
 curl -H "Authorization: Bearer <YOUR_TOKEN>" \
      https://www.googleapis.com/drive/v3/files/1syBPCdU0Hs2AWgQfsPohqMFXNEpM3eWV?alt=media \
      -o KITTI360_For_Upload.zip
-```
-
-### 2. Extract and Organize Data
-
-```bash
-# Unzip the dataset
 unzip KITTI360_For_Upload.zip
-
-# Remove existing soft links (if any)
-find <dataset_path> -type l -exec rm -v {} +
 ```
 
-### 3. Create Soft Links for Training
+Set the root in config:
+
+```json
+// trainer/configs/base.json
+"DATASET": {
+  "ROOT": "/path/to/KITTI360_For_Upload",
+  ...
+}
+```
+
+Per-sequence overrides live in `trainer/configs/sequence_XX.json` (relative paths only).
+
+### 2. Generate pseudo depth (WAFT-Stereo, recommended)
+
+Model weights (~2 GB) are **not** in the repo — auto-downloaded on first run from [HuggingFace](https://huggingface.co/MemorySlices/WAFT-Stereo), or place manually at `preprocessing/disparity_estimation/WAFT-Stereo/ckpts/Real/DAv2L-5.pth`.
+
+WAFT uses a **separate pixi env** (PyTorch ≥ 2.0):
 
 ```bash
-python soft_link.py \
-    --soft_linked_folder $your_target_path \
-    --source_root_folder $your_source_path
+cd preprocessing/disparity_estimation/WAFT-Stereo
+pixi install
+cd ../..
+
+# Single sequence (recommended for first run)
+sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
+
+# All sequences (slow — tens of hours)
+sh preprocessing/scripts/generate_pseudo_depth_waft.sh
 ```
 
-### 4. Update Configuration Files
+Output: `{DATASET_ROOT}/pseudo_depth_ssl_waft_stereo/<sequence>/image_00/data_rect/*.png`  
+Format: uint16 PNG, depth in metres = pixel value / 256.
 
-```bash
-# Update dynamic filenames and sample filenames
-python update_sampled_image_filenames.py \
-    --gt_original_root_folder $your_root_path \
-    --changed_root_folder_root $your_changed_root_path
+See [preprocessing/README.md](preprocessing/README.md) for API usage (`preprocessing/apis/depth_estimator.py`).
 
-# Update config files
-python update_configs.py \
-    --root_path <dataset_path> \
-    --configs_path trainer/configs
-```
+Legacy LEAStereo path: `sh preprocessing/scripts/generate_pseudo_depth.sh` (requires manual Kitti15 weight download).
+
+### 3. Generate dynamic labels
+
+Requires MeMFlow optical flow weights (also not in repo). See [preprocessing/README.md](preprocessing/README.md) → Dynamic Static Filtering.
+
+Output: `{DATASET_ROOT}/dynamic_attributes_est/syncXX/dynamic_mask.txt`
 
 ---
 
@@ -204,9 +241,9 @@ python preprocess.py \
     --use_multi_thread
 ```
 
-**Required Models:**
-- **Optical Flow**: [MeMFlow (CVPR 2024)](https://github.com/DQiaole/MemFlow)
-- **Depth**: [LeaStereo (NeurIPS 2020)](https://github.com/XuelianCheng/LEAStereo)
+**Required Models (not shipped in repo — see `.gitignore`):**
+- **Optical Flow**: [MeMFlow (CVPR 2024)](https://github.com/DQiaole/MemFlow) — download `.pth` to `preprocessing/optical_flow_estimation/MeMFlow/ckpts/`
+- **Depth**: [WAFT-Stereo](https://github.com/MemorySlices/WAFT-Stereo) (recommended) or [LEAStereo](https://github.com/XuelianCheng/LEAStereo) (legacy)
 
 #### 1.2 Initial Attribute Estimation
 
@@ -221,37 +258,53 @@ This step provides:
 - Initial velocity from ICP
 - Location and orientation from ROI LiDAR + velocity
 
-#### 1.3 Depth Estimation (Optional)
+#### 1.3 Depth Estimation
 
-Generate pseudo depth maps:
+Generate pseudo depth with WAFT-Stereo (recommended):
 
 ```bash
-sh generate_pseudo_depth.sh
+sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
 ```
+
+Legacy LEAStereo:
+
+```bash
+sh preprocessing/scripts/generate_pseudo_depth.sh 0006
+```
+
+Details: [preprocessing/README.md](preprocessing/README.md).
 
 ### Phase 2: Stage 1 - Multi-View 3D Auto-Labeling
 
 #### 2.1 Training Configuration
 
-Edit config files in `trainer/configs/`:
+Configs are JSON under `trainer/configs/`:
 
-```python
-# Enable dynamic modeling
-_C.TRAIN.USE_RDF_MODELING = True
-_C.TRAIN.USE_DYNAMIC_MASK = True
-_C.TRAIN.USE_DYNAMIC_MODELING = True
-
-# Dynamic modeling type: 'mlp', 'vector_velocity', or 'scalar_velocity'
-_C.TRAIN.DYNAMIC_MODELING_TYPE = 'vector_velocity'
-
-# Dynamic labels path
-_C.TRAIN.DYNAMIC_LABELS_PATH = "<dataset_path>/dynamic_mask.txt"
-
-# Optimization steps
-_C.TRAIN.OPTIMIZATION_NUM_STEPS = 3000
-_C.TRAIN.OPTIMIZATION_WARMUP_STEPS = 1000
-_C.TRAIN.OPTIMIZATION_RESIDUAL_BOX_STEPS = 2000
 ```
+trainer/configs/
+├── base.json           # defaults + DATASET.ROOT
+├── sequence_00.json    # per-sequence overrides (relative paths)
+└── ...
+```
+
+Load in code: `from trainer.configs import load_config; cfg = load_config("00")`
+
+Key fields in `base.json`:
+
+```json
+{
+  "TRAIN": {
+    "DATASET": { "ROOT": "/path/to/KITTI360_For_Upload" },
+    "USE_RDF_MODELING": true,
+    "USE_DYNAMIC_MASK": true,
+    "USE_DYNAMIC_MODELING": true,
+    "DYNAMIC_MODELING_TYPE": "vector_velocity",
+    "OPTIMIZATION_NUM_STEPS": 3000
+  }
+}
+```
+
+Per-sequence paths (`FILENAMES`, `DYNAMIC_LABELS_PATH`) are relative to `DATASET.ROOT` in `sequence_XX.json`.
 
 #### 2.2 Training
 

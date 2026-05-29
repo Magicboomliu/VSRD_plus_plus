@@ -164,6 +164,30 @@ def test_dynamic_labels_path_exists(name):
 # 6. Image paths inside dynamic_mask.txt resolve to real files (first + last)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. pseudo_depth_ssl coverage: every image in FILENAMES must have a depth PNG
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("name", SEQUENCE_CONFIGS)
+def test_pseudo_depth_exists_for_sampled_frames(name):
+    """Every frame listed in sampled_image_filenames.txt must have a depth map."""
+    cfg = load_config(name)
+    root = cfg.TRAIN.DATASET.ROOT
+    for txt_path in cfg.TRAIN.DATASET.FILENAMES:
+        if not os.path.isfile(txt_path):
+            pytest.skip(f"Data not yet generated — txt missing: {txt_path}")
+        with open(txt_path) as f:
+            lines = [l.strip() for l in f if l.strip()]
+        for line in lines:
+            img_path = _parse_filenames_line(line, root)
+            depth_path = img_path.replace("data_2d_raw", "pseudo_depth_ssl")
+            assert os.path.isfile(depth_path), (
+                f"Depth map missing for sampled frame:\n"
+                f"  image: {img_path}\n"
+                f"  depth: {depth_path}"
+            )
+
+
 @pytest.mark.parametrize("name", SEQUENCE_CONFIGS)
 def test_dynamic_mask_image_paths_exist(name):
     cfg = load_config(name)

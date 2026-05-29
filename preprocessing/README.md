@@ -7,48 +7,108 @@ We distinguish the dyanmic and static by looking at the 2D movement observations
 
 ![image1](figures/figure1.png)
 
-## Get Pretrained Optical Flow and Depth Informnation
-- Optical Flow ([MeMFlow(CVPR24)](https://github.com/DQiaole/MemFlow)) 
+## Get Pretrained Optical Flow and Depth Information
 
-Download the [pretrained-weight](https://github.com/DQiaole/MemFlow/releases/tag/v1.0.0) here. We provided an API to invoke the optical flow estimators. See the `preprocessing/APIs/optical_flow_estimator.py`
+### Optical Flow ([MeMFlow (CVPR24)](https://github.com/DQiaole/MemFlow))
 
-An Simple Example Here: 
+Download the [pretrained weight](https://github.com/DQiaole/MemFlow/releases/tag/v1.0.0), then use the MeMFlow inference code under `preprocessing/optical_flow_estimation/MeMFlow/`.
 
-```
+Example (paths are machine-specific — update `model_path` accordingly):
+
+```python
 from preprocessing.APIs.optical_flow_estimator import Load_Optical_Flow_Model
 
-if __name__="__main__":
+model_name = "MeMFlow"
+device = "cuda:0"
+model_path = "/path/to/MeMFlow/ckpts/MemFlowNet_kitti.pth"
 
-    model_name = "MeMFlow"
-    device = "cuda:0"
-
-    # pretrained model here
-    model_path = "/home/zliu/Desktop/CVPR2025/VSRD-V2/data_pre_processing/Dynamic_Static_Clss_Flow_based/MeMFlow/ckpts/MemFlowNet_kitti.pth"
-    
-    optical_processor,cfg = Load_Optical_Flow_Model(model_name=model_name,device=device,model_path=model_path)
+optical_processor, cfg = Load_Optical_Flow_Model(
+    model_name=model_name, device=device, model_path=model_path
+)
 ```
 
-- Depth Information ([LeaStereo(NeurIPS20)](https://github.com/XuelianCheng/LEAStereo))
+### Depth — WAFT-Stereo (recommended)
 
- We provided an API to invoke the depth estimators. See the `preprocessing/APIs/depth_estimator.py` for detailed usage example .   
+Pseudo depth for VSRD++ training is stored as uint16 PNG (`value / 256` = depth in metres). The default output directory name includes the depth model, e.g. `pseudo_depth_ssl_waft_stereo/`.
 
- ```
-from preprocessing.APIs.depth_estimator import Load_Depth_Model
+We wrap [WAFT-Stereo](https://github.com/MemorySlices/WAFT-Stereo) in `preprocessing/apis/depth_estimator.py`. The model code lives in `preprocessing/disparity_estimation/WAFT-Stereo/` and has its **own pixi environment** (PyTorch ≥ 2.0). Run depth inference inside that environment, not the main VSRD++ pixi env.
 
-if __name__=="__main__":
-    # Loaded the Model
-    pretrained_disparity_path = "/home/zliu/CVPR25_Detection/VSRD-V2/preprocessing/disparity_estimation/Leastereo/run"    
-    device = 'cuda:0'
-    model_name = "LEAStereo"
-    model = Load_Depth_Model(model_name=model_name,device=device,model_path=pretrained_disparity_path)
-    
- ```
+**Setup (once)**
 
- We can also prepocess the depth information by using the following scripts:  
- ```
- cd preprocessing/scripts  
- sh generate_pseudo_depth.sh
- ```
+```bash
+cd preprocessing/disparity_estimation/WAFT-Stereo
+pixi install
+# Weights auto-download from HuggingFace on first run (ckpts/Real/DAv2L-5.pth)
+```
+
+**Single-pair inference**
+
+```python
+from preprocessing.apis.depth_estimator import Load_Depth_Model
+
+model = Load_Depth_Model("WAFT-Stereo", device="cuda:0")
+
+# left/right image paths, or numpy arrays (H×W×3)
+depth_m = model.infer(left_path, right_path)  # float32 (H, W), metres
+
+# KITTI360: auto-pair image_00 -> image_01
+depth_m = model.infer_from_left(
+    "data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000251.png"
+)
+```
+
+**Batch generate pseudo depth for KITTI360**
+
+Set `DATASET_ROOT` in `trainer/configs/base.json` (`TRAIN.DATASET.ROOT`), then:
+
+```bash
+# All sequences → pseudo_depth_ssl_waft_stereo/
+sh preprocessing/scripts/generate_pseudo_depth_waft.sh
+
+# Single sequence
+sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
+
+# Custom output dir name
+OUTPUT_NAME=pseudo_depth_ssl_waft sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
+```
+
+Or from the WAFT pixi env:
+
+```bash
+cd preprocessing/disparity_estimation/WAFT-Stereo
+PYTHONPATH=<project_root> pixi run python -m preprocessing.apis.depth_estimator --seq 0006
+```
+
+Output layout (relative to dataset root, default dir name `pseudo_depth_ssl_waft_stereo`):
+
+```
+pseudo_depth_ssl_waft_stereo/
+└── 2013_05_28_drive_0000_sync/
+    └── image_00/data_rect/
+        ├── 0000000251.png   # uint16, depth_m = pixel / 256
+        └── ...
+```
+
+Default camera params for KITTI360: `fx=552.554261`, `baseline=0.5942 m`, depth clipped to `[0, 80] m`.
+
+**API reference (`preprocessing/apis/depth_estimator.py`)**
+
+| Function | Description |
+|----------|-------------|
+| `Load_Depth_Model("WAFT-Stereo", device=...)` | Load model, return `DepthModel` |
+| `model.infer(left, right)` | Stereo inference → depth (m) |
+| `model.infer_from_left(left_path)` | Auto `image_00` → `image_01` pairing |
+| `save_depth_png(depth_m, path)` | Save uint16 PNG for `pseudo_depth_ssl` |
+| `generate_pseudo_depth_sequence(seq_dir, ...)` | Batch one sequence |
+
+### Depth — LEAStereo (legacy)
+
+[LEAStereo (NeurIPS20)](https://github.com/XuelianCheng/LEAStereo) is still available under `preprocessing/disparity_estimation/Leastereo/`. It requires manually downloading Kitti15 weights to `Leastereo/run/Kitti15/best/best.pth`.
+
+```bash
+bash preprocessing/scripts/generate_pseudo_depth.sh        # all sequences
+bash preprocessing/scripts/generate_pseudo_depth.sh 0006  # one sequence
+```
 
 
 ## Dynamic Static Filtering  
@@ -59,11 +119,11 @@ we generate the dyanmic by looking though a seqential image frames which contain
 
 ```
 cd preprocessing/dyanmic_static_filtering/
-python dynamic_mask_gt_generataion.py --seed 1234 \ 
+python dynamic_mask_gt_generataion.py --seed 1234 \
         --neighbour_sample 16 \
-        --image_folder /media/zliu/data12/dataset/KITTI/VSRD_Format/data_2d_raw/ \
-        --filename_folder /media/zliu/data12/dataset/KITTI/VSRD_Format/filenames/R50-N16-M128-B16 \
-        --saved_folder /media/zliu/data12/dataset/KITTI/VSRD_Format/dynamic_static/ \
+        --image_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/data_2d_raw/ \
+        --filename_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/filenames/R50-N16-M128-B16 \
+        --saved_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/dynamic_attributes_est/ \
         --use_multi_thread
 ```
 
@@ -73,12 +133,12 @@ We using the depth and the optical flow warping consistency to distinguish the d
 
 ```
 cd preprocessing/dyanmic_static_filtering/
-python preprocess.py --seed 1234 \ 
+python preprocess.py --seed 1234 \
         --neighbour_sample 16 \
-        --image_folder /media/zliu/data12/dataset/KITTI/VSRD_Format/data_2d_raw/ \
-        --filename_folder /media/zliu/data12/dataset/KITTI/VSRD_Format/filenames/R50-N16-M128-B16 \
-        --saved_folder /media/zliu/data12/dataset/KITTI/VSRD_Format/dynamic_static/ \
-        --optical_flow_model_path /home/zliu/Desktop/CVPR2025/VSRD-V2/data_pre_processing/Dynamic_Static_Clss_Flow_based/MeMFlow/ckpts/MemFlowNet_kitti.pth /
+        --image_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/data_2d_raw/ \
+        --filename_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/filenames/R50-N16-M128-B16 \
+        --saved_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/dynamic_attributes_est/ \
+        --optical_flow_model_path /path/to/MeMFlow/ckpts/MemFlowNet_kitti.pth \
         --use_multi_thread
 ```
 
