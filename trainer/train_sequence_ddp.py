@@ -53,6 +53,7 @@ from vsrd_plus_plus import visualization
 
 from trainer.utils.box_geo import decode_box_3d,divide_into_n_parts,get_dynamic_mask_for_the_world_output,get_dynamic_sequentail_for_the_world_output
 from trainer.utils.file_io import read_text_lines,read_complex_strings
+from preprocessing.Initial_Attributes import estimate_initial_attributes, extract_initial_attributes
 import re
 
 import vsrd_plus_plus
@@ -255,29 +256,6 @@ def main(args=None):
             logger = utils.get_logger(image_dirname)
             
 
-            # load the dynamic mask
-            dynamic_labels_for_target_view = dict()
-            dynamic_labels_for_target_view["instance_ids"] = []
-            dynamic_labels_for_target_view["dynamic_labels"] = []
-            
-            if USE_DYNAMIC_MODELING_FLAG:
-                if USE_DYNAMIC_MASK_FLAG:
-                    dynamic_raw_contents = read_text_lines(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)
-                    for content in dynamic_raw_contents:
-                        content = content.strip()
-                        current_returned_ids,current_returned_filename,current_return_labels = content.split(" ")
-                        if not os.path.isabs(current_returned_filename):
-                            current_returned_filename = os.path.join(dataset_root, current_returned_filename)
-                        if current_returned_filename == image_filename:
-                            # current optimized instance ids
-                            dynamic_labels_for_target_view['instance_ids'] = current_returned_ids
-                            # current labels
-                            dynamic_labels_for_target_view["dynamic_labels"] = current_return_labels
-                            break
-            
-            
-
-            
             # Output Locations
             ckpt_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "ckpts/{}".format(my_conf_train.TRAIN.MODEL_TYPE)),image_dirname)
             log_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "logs"),image_dirname)
@@ -440,52 +418,34 @@ def main(args=None):
                     visible_masks=source_visible_masks,
                 )
                 
-            # Read the Dynamic Masks
-            if USE_DYNAMIC_MODELING_FLAG:
-                if USE_DYNAMIC_MASK_FLAG:
-                    # get all the labels which is a string 
-                    dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
-                
-                    dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
-            
-
+            dynamic_mask_for_target_view = [False] * num_instances
             print("Begin Initializations..........")
-            multi_inputs = Get_Initial_Attributes(multi_inputs=multi_inputs,
-                                                  dynamic_mask_list=dynamic_mask_for_target_view,
-                                                  device=device_id)
-            
-            gt_loc = multi_inputs[0]['est_loc'].float().contiguous().to(device_id)
-            gt_velocity = multi_inputs[0]['velo'].float().contiguous().to(device_id)
-            gt_orientation = multi_inputs[0]['est_orient'].float().contiguous().to(device_id)
-            
-            initial_loc_and_velo_validaity = multi_inputs[0]['LiDAR_Validality']
-            
-            if multi_inputs[0]['gt_loc'] is not None:
-                true_gt_loc = multi_inputs[0]['gt_loc'].float().contiguous().to(device_id)
-                if torch.max(torch.abs(true_gt_loc-gt_loc))>4:
-                    gt_loc = true_gt_loc
-            
-    
-            
+            multi_inputs = estimate_initial_attributes(
+                multi_inputs=multi_inputs,
+                device=device_id,
+            )
+            init_attrs = extract_initial_attributes(multi_inputs, device=device_id)
+            if USE_DYNAMIC_MODELING_FLAG and USE_DYNAMIC_MASK_FLAG and init_attrs.is_dynamic is not None:
+                dynamic_mask_for_target_view = init_attrs.is_dynamic
+
             # initialization
             with torch.no_grad():
-                
-                if initial_loc_and_velo_validaity:
-                    gt_loc_for_initial = encode_location(gt_loc)                
-                    gt_orientation_for_initial = encode_orientation(gt_orientation)
-                    models['detector'].velocity = torch.nn.Parameter(gt_velocity)
-                    models['detector'].locations = torch.nn.Parameter(gt_loc_for_initial)
-                    
-                    # initialization for dynamic objcetrs
+                if init_attrs.roi_lidar_valid:
+                    loc_for_initial = encode_location(init_attrs.est_location)
+                    orient_for_initial = encode_orientation(init_attrs.est_orientation)
+                    models['detector'].velocity = torch.nn.Parameter(init_attrs.est_velocity)
+                    models['detector'].locations = torch.nn.Parameter(loc_for_initial)
+
+                    # initialization for dynamic objects
                     for idx, dynamic_mask in enumerate(dynamic_mask_for_target_view):
                         if dynamic_mask:
-                            if models['detector'].orientations.shape[1]==gt_orientation_for_initial.shape[1]:
+                            if models['detector'].orientations.shape[1] == orient_for_initial.shape[1]:
                                 try:
-                                    models['detector'].orientations[:,idx,:] = torch.nn.Parameter(gt_orientation_for_initial)[:,idx,:]
-                                except:
+                                    models['detector'].orientations[:, idx, :] = torch.nn.Parameter(
+                                        orient_for_initial
+                                    )[:, idx, :]
+                                except Exception:
                                     pass
-                else:
-                    pass
     
             
             print("After initailzaition....")
@@ -667,13 +627,13 @@ def main(args=None):
                                 # using gt for velocaity and the loctaions for visualization
                                 re_order_velo,re_order_loc = get_dynamic_sequentail_for_the_world_output(target_inputs=target_inputs,
                                                                             world_boxes_3d=world_boxes_3d,
-                                                                            target_location=gt_loc[0],
-                                                                            target_speed=gt_velocity[0])
+                                                                            target_location=init_attrs.est_location[0],
+                                                                            target_speed=init_attrs.est_velocity[0])
                                 
 
                                 # Is This a BUG?
                                 
-                                if initial_loc_and_velo_validaity:
+                                if init_attrs.roi_lidar_valid:
                                     location_loss = F.l1_loss(re_order_loc,world_outputs.locations.squeeze(0)) # BUG1
                                     velocity_loss = F.l1_loss(re_order_velo,models['detector'].velocity.squeeze(0))
                                 else:

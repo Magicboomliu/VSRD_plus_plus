@@ -394,3 +394,16 @@ def rotation_matrix_y_single(cos, sin):
 
     return rotation_matrices
 
+
+def disparity_to_depth(disparity, baseline=0.60, focal_length=552.5543, mode=1):
+    """Convert disparity tensor to depth (metres)."""
+    return Convert_Disparity_to_Depth(
+        disparity,
+        baseline=baseline,
+        focal_length=focal_length,
+        mode=mode,
+    )
+
+
+def sort_roi_lidar_by_frame(tuples_list):
+    return Sort_valid_ROI_LiDAR_by_relative_id(tuples_list)

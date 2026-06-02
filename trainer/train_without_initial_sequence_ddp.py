@@ -52,7 +52,7 @@ import datetime
 from vsrd_plus_plus import visualization
 
 from trainer.utils.box_geo import decode_box_3d,divide_into_n_parts,get_dynamic_mask_for_the_world_output,get_dynamic_sequentail_for_the_world_output
-from trainer.utils.file_io import read_text_lines,read_complex_strings
+from preprocessing.Initial_Attributes import infer_dynamic_mask_from_multi_inputs
 import re
 
 import vsrd_plus_plus
@@ -256,25 +256,6 @@ def main(args=None):
             logger = utils.get_logger(image_dirname)
             
 
-            # load the dynamic mask
-            dynamic_labels_for_target_view = dict()
-            dynamic_labels_for_target_view["instance_ids"] = []
-            dynamic_labels_for_target_view["dynamic_labels"] = []
-            
-            if USE_DYNAMIC_MODELING_FLAG:
-                if USE_DYNAMIC_MASK_FLAG:
-                    dynamic_raw_contents = read_text_lines(my_conf_train.TRAIN.DYNAMIC_LABELS_PATH)
-                    for content in dynamic_raw_contents:
-                        content = content.strip()
-                        current_returned_ids,current_returned_filename,current_return_labels = content.split(" ")
-                        if not os.path.isabs(current_returned_filename):
-                            current_returned_filename = os.path.join(dataset_root, current_returned_filename)
-                        if current_returned_filename == image_filename:
-                            dynamic_labels_for_target_view['instance_ids'] = current_returned_ids
-                            dynamic_labels_for_target_view["dynamic_labels"] = current_return_labels
-                            break
-            
-            
             # Output Locations
             ckpt_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "ckpts/{}".format(my_conf_train.TRAIN.MODEL_TYPE)),image_dirname)
             log_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "logs"),image_dirname)
@@ -429,14 +410,10 @@ def main(args=None):
                     visible_masks=source_visible_masks,
                 )
                 
-            # Read the Dynamic Masks
-            if USE_DYNAMIC_MODELING_FLAG:
-                if USE_DYNAMIC_MASK_FLAG:
-                    dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
-                    
-                    dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
-            
-                        
+            dynamic_mask_for_target_view = [False] * num_instances
+            if USE_DYNAMIC_MODELING_FLAG and USE_DYNAMIC_MASK_FLAG:
+                dynamic_mask_for_target_view = infer_dynamic_mask_from_multi_inputs(multi_inputs)
+
             # ================================================================
             # optimizer
             if USE_DYNAMIC_MODELING_FLAG and  DYNAMIC_TYPE=='mlp':

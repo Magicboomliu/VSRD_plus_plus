@@ -1,110 +1,116 @@
-# Stage1 and Stage 2 validator  
+# Validator (Stage 1 & 2 evaluation)
 
-## Stage1: Multi-View AutoLabeling validator.
-#### Step1: Using the pretrained Models to Generated Psudo Labels in Json Format  
-- Prediction Generation
+Evaluation pipeline for multi-view auto-labeling quality (IoU, mAP, visualization).
+
+**Dynamic labels:** Step1 and Step3 read `dynamic_mask.txt` from `DYNAMIC_DIRNAME`. Training uses online GT velocity; validator uses the exported txt file. See also the root [README.md](../README.md#3-dynamic--static-classification).
+
+## Dynamic labels workflow
+
+Recommended flow before running validator:
+
+```bash
+# 1. Generate dynamic_mask.txt (GT bbox velocity, 0.20 m/frame)
+python -m preprocessing.Dynamic_Labels.pipeline --config sequence_07
+# or all sequences:
+sh preprocessing/scripts/generate_dynamic_labels.sh
+
+# 2. Compare against legacy labels (quality gate)
+python scripts/compare_dynamic_mask_gt.py --config sequence_07
+python scripts/sweep_dynamic_threshold_global.py   # optional
+
+# 3. Run validator with generated labels
+export ROOT_DIRNAME=/path/to/KITTI360_For_Upload
+export CKPT_DIRNAME=/path/to/trainer/ckpts/your_run
+export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est_gt
+sh validator/make_predictions_scripts/run_evaluation_pipeline.sh
 ```
+
+| Path | Role |
+|------|------|
+| `dynamic_attributes_est_gt/syncXX/` | Generated labels (recommended for validator) |
+| `dynamic_attributes_est/syncXX/` | Legacy reference (compare script ground truth) |
+
+To test against legacy labels directly: `export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est`
+
+### Environment variables
+
+All shell scripts under `make_predictions_scripts/` accept overrides:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ROOT_DIRNAME` | KITTI360 dataset root | |
+| `CKPT_DIRNAME` | `trainer/ckpts` | Checkpoint directory for export |
+| `DYNAMIC_DIRNAME` | `{ROOT}/dynamic_attributes_est_gt` | Parent of `syncXX/dynamic_mask.txt` |
+| `INPUT_MODEL_TYPE` | `velocity_with_init` | Model architecture for JSON export |
+| `NUM_WORKERS` | `4` | Multiprocessing workers |
+
+---
+
+## Stage1: Multi-View AutoLabeling validator
+
+### Step1: Generate pseudo labels in JSON format
+
+**Prediction generation**
+
+```bash
 cd validator/make_predictions_scripts
-sh make_prediction.sh 
-
-# where inside it is:  
-
-python make_predictions.py \
-    --root_dirname $ROOT_DIRNAME \
-    --ckpt_dirname $CKPT_DIRNAME \
-    --num_workers $NUM_WORKERS \
-    --dyanmic_root_filename $DYNAMIC_DIRNAME \
-    --input_model_type $INPUT_MODEL_TYPE
-
+sh make_prediction.sh
 ```
 
-Then you will find a directories named `predictions` which contains the all pseudo labels in the `.json` format.  
-- Ground Truth Generation.  
-```
+**Ground truth generation**
+
+```bash
 cd validator/make_predictions_scripts
 sh make_gt_prediction.sh
-
-# where inside it is:  
-
-python make_gt_predictions.py \
-    --root_dirname $ROOT_DIRNAME \
-    --ckpt_dirname $CKPT_DIRNAME \
-    --num_workers $NUM_WORKERS \
-    --dyanmic_root_filename $DYNAMIC_DIRNAME \
-    --input_model_type $INPUT_MODEL_TYPE
-
-```  
-Then you will find a directories named `my_gts` which contains the all pseudo labels in the `.json` format.  
-
-#### Step2: Convert it into KITTI3D `.txt` format 
-
 ```
+
+Both Step1 scripts use `--dyanmic_root_filename $DYNAMIC_DIRNAME` to load per-instance dynamic flags.
+
+Output: `predictions/` (model pseudo labels) and checkpoint-derived GT JSON.
+
+### Step2: Convert to KITTI3D `.txt` format
+
+```bash
 cd validator/make_predictions_scripts
-
-
-python convert_prediction.py \
+python ../tools/Predictions/convert_prediction.py \
     --root_dirname $ROOT_DIRNAME \
     --ckpt_dirname $CKPT_DIRNAME \
-    --num_workers $NUM_WORKERS \
-    --json_foldername $JSON_FOLDERNAME \
-    --output_labelname $OUTPUT_LABELNAME
-
+    --json_foldername predictions \
+    --output_labelname perfect_prediction
 ```
 
-### Step3: Dynamic Objects Assignment using GT Labels
+### Step3: Dynamic attribute assignment for GT KITTI labels
 
-```
+Reads the same `dynamic_mask.txt` as Step1 (not recomputed from neighbors).
+
+```bash
 cd validator/make_predictions_scripts
 sh dynamic_attribute.sh
-
-python get_gt_with_dynamic_label.py \
-    --root_dirname $ROOT_DIRNAME \
-    --ckpt_dirname $CKPT_DIRNAME \
-    --num_workers $NUM_WORKERS \
-    --json_foldername $JSON_FOLDERNAME \
-    --output_labelname $OUTPUT_LABELNAME \
-    --dynamic_threshold $DYNAMIC_THRESHOLD
-
 ```
 
-### Step4: Convert it into the KITTI3D One Folder
+### Step4: Convert to KITTI3D folder structure
 
-```
+```bash
 cd validator/dataset_structure_configuration
 sh conversion_kitti3d_structure.sh
-
-python conversion_kitt3d_structure.py --root_dirname $ROOT_DIRNAME \
-                                        --prediction_label_path $PREDICTION_LABEL_PATH \
-                                        --gt_label_path $GT_LABEL_PATH \
-                                        --training_split $TRAINING_SPLIT \
-                                        --testing_split $TESTING_SPLIT \
-                                        --output_folder $OUTPUT_FOLDER
-
 ```
 
-### Step5: Get the mIOU for each sequences
+### Step5: mIoU
 
-```
+```bash
 cd validator/stage1_evaluation_scripts
 sh get_iou.sh
-
-python get_IoU.py --prediction_folder $PREDICTION_FOLDER \
-                  --gt_folder $GT_FOLDER \
-                  --output_name $OUTPUT_NAME \
-                  --options $OPTIONS
-
 ```
 
+### Step6: mAP
 
-
-### Step6: Get the mAP for specific sequences
-
-```
+```bash
 cd validator/stage1_evaluation_scripts
-sh get_mAP.sh 
+sh get_mAP.sh
+```
 
-python get_mAP.py --pd_dir_folder $pd_dir_folder \
-                 --gt_dir_folder $gt_dir_folder \
-                 --saved_mAP_folder $saved_mAP_folder
+### Unified pipeline (Step 1–4)
 
+```bash
+sh validator/make_predictions_scripts/run_evaluation_pipeline.sh
 ```

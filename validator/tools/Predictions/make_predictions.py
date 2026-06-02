@@ -22,7 +22,15 @@ import torch.utils.tensorboard
 import sys
 
 import vsrd_plus_plus.datasets
-sys.path.append("..")
+
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+from validator.tools.dynamic_labels_io import (
+    load_dynamic_mask_by_instance_ids,
+    resolve_dataset_path,
+)
 
 from vsrd_plus_plus import utils
 from torch.utils.data import Dataset, DataLoader
@@ -120,7 +128,9 @@ def main(args):
                 ckpt_filename=args.ckpt_filename,
                 split_dirname=args.split_dirname,
                 class_names=args.class_names,
-                dynamic_dirname= args.dyanmic_root_filename,
+                dynamic_dirname=args.dyanmic_root_filename,
+                input_model_type=args.input_model_type,
+                saved_pseudo_folder_path=args.saved_pseudo_folder_path,
             ), dynamic_seqences):
 
                 progress_bar.update(1)
@@ -132,7 +142,10 @@ def make_predictions(
     ckpt_filename,
     split_dirname,
     dynamic_dirname,
-    class_names,):
+    class_names,
+    input_model_type,
+    saved_pseudo_folder_path,
+):
     
     # group txt
     group_filename = os.path.join(root_dirname, "filenames", split_dirname, sequence, "grouped_image_filenames.txt")
@@ -152,21 +165,15 @@ def make_predictions(
     assert os.path.exists(sample_filename)
     with open(sample_filename) as file:
         sampled_image_filenames = {
-            tuple(map(int, line.split(" ")[0].split(","))): line.split(" ")[1]
+            tuple(map(int, line.split(" ")[0].split(","))): resolve_dataset_path(
+                root_dirname, line.split(" ")[1],
+            )
             for line in map(str.strip, file)
         }
-    
-    # dynamic txt
-    dynamic_txt_filename = os.path.join(dynamic_dirname,"sync"+sequence[-7:-5],"dynamic_mask.txt")
-    
 
-    
-    assert os.path.exists(dynamic_txt_filename)
-    with open(dynamic_txt_filename) as file:
-        dynamic_instance_list = {
-            tuple(map(int, line.split(" ")[0].split(","))): [int(float(item)) for item in line.split(" ")[2].split(",")] 
-            for line in map(str.strip, file)
-        }
+    dynamic_instance_list = load_dynamic_mask_by_instance_ids(
+        dynamic_dirname, sequence, root_dirname,
+    )
         
     
     for instance_ids, grouped_image_filenames in tqdm(grouped_image_filenames.items()):
@@ -194,7 +201,7 @@ def make_predictions(
         models_weights_new = target_checkpoint['models']
         
         # load the pretrained models
-        if args.input_model_type=='velocity_with_init':
+        if input_model_type == 'velocity_with_init':
             
             models = Dict()
             detector = BoxParameters3D_With_Velocity(batch_size=1,
@@ -409,7 +416,7 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join(args.saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
+                source_prediction_dirname = os.path.join(saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
                 source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
                 
 
@@ -429,7 +436,7 @@ def make_predictions(
                 callback(confidences=confidences)
         
         # load the pretrained models
-        if args.input_model_type =="vanilla":
+        if input_model_type == "vanilla":
             models = Dict()
             detector = BoxParameters3D(batch_size=1,
                                        num_instances=num_instances,
@@ -618,7 +625,7 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join(args.saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
+                source_prediction_dirname = os.path.join(saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
                 source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
                 
 
@@ -638,7 +645,7 @@ def make_predictions(
                 callback(confidences=confidences)
         
         # load the pre-trained models
-        if args.input_model_type =="velocity_only":
+        if input_model_type == "velocity_only":
             
             models = Dict()
             detector = BoxParameters3D_With_Velocity(batch_size=1,
@@ -855,7 +862,7 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join(args.saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
+                source_prediction_dirname = os.path.join(saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
                 source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
                 
 
@@ -876,7 +883,7 @@ def make_predictions(
         
         # load the pre-trained models
         # load the pre-trained models
-        if args.input_model_type =="mlp_only":
+        if input_model_type == "mlp_only":
             
             models = Dict()
             detector = BoxParameters3DRBN(batch_size=1,
@@ -1078,7 +1085,7 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join(args.saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
+                source_prediction_dirname = os.path.join(saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
                 source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
                 
 

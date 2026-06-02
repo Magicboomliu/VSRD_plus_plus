@@ -132,7 +132,7 @@ def step3_dynamic_attribute(args):
         "--num_workers", str(args.num_workers),
         "--json_foldername", args.json_foldername,
         "--output_labelname", args.output_labelname,
-        "--dynamic_threshold", str(args.dynamic_threshold),
+        "--dyanmic_root_filename", args.dynamic_dirname,
         "--class_names"] + args.class_names
     
     if not run_command(cmd, "Dynamic attribute assignment", cwd=str(dynamic_dir)):
@@ -301,8 +301,12 @@ Examples:
                         help="Class names (default: ['car'])")
     
     # Step 1 arguments
-    parser.add_argument("--dynamic_dirname", type=str, default="",
-                        help="Dynamic mask directory path")
+    parser.add_argument(
+        "--dynamic_dirname",
+        type=str,
+        default="",
+        help="Directory with syncXX/dynamic_mask.txt (e.g. dynamic_attributes_est_gt/)",
+    )
     parser.add_argument("--input_model_type", type=str, default="velocity_with_init",
                         help="Model type: vanilla, velocity, mlp, velocity_with_init")
     parser.add_argument("--saved_pseudo_folder_path", type=str, default="predictions",
@@ -316,9 +320,13 @@ Examples:
     parser.add_argument("--output_labelname", type=str, default="perfect_prediction",
                         help="Output label folder name (default: perfect_prediction)")
     
-    # Step 3 arguments
-    parser.add_argument("--dynamic_threshold", type=float, default=0.01,
-                        help="Dynamic threshold (default: 0.01)")
+    # Step 3 arguments (reads dynamic_mask.txt; same source as Step 1)
+    parser.add_argument(
+        "--dynamic_threshold",
+        type=float,
+        default=0.20,
+        help="Deprecated; kept for shell compatibility. Step3 reads dynamic_mask.txt.",
+    )
     
     # Step 4 arguments
     parser.add_argument("--training_split", type=str, default="00,02,03,04,05,06,07,09",

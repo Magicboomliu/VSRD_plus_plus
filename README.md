@@ -73,7 +73,7 @@ pixi run python -c "import torch; print(torch.__version__, torch.cuda.is_availab
 pixi run test-data   # check dataset paths (after setting DATASET.ROOT)
 ```
 
-> **Note:** Large model weights (`.pth`, ~GB each) are listed in `.gitignore` and must be downloaded separately — WAFT-Stereo, MeMFlow, LEAStereo, etc.
+> **Note:** Large model weights (`.pth`, ~GB each) are listed in `.gitignore` and must be downloaded separately — WAFT-Stereo, LEAStereo, etc.
 
 ---
 
@@ -90,7 +90,8 @@ KITTI360_For_Upload/
 ├── filenames/                # Sampled frame lists (.txt, relative paths inside)
 ├── pseudo_depth_ssl/         # Legacy pseudo depth (LEAStereo, optional)
 ├── pseudo_depth_ssl_waft_stereo/  # WAFT-Stereo pseudo depth (recommended)
-└── dynamic_attributes_est/   # Dynamic object labels (generated)
+├── dynamic_attributes_est/        # Legacy dynamic labels (reference / comparison)
+└── dynamic_attributes_est_gt/     # Generated dynamic labels (recommended for validator)
 ```
 
 Filenames inside `.txt` files use **relative paths**; only `DATASET.ROOT` in config needs to change when moving machines.
@@ -149,11 +150,37 @@ See [preprocessing/README.md](preprocessing/README.md) for API usage (`preproces
 
 Legacy LEAStereo path: `sh preprocessing/scripts/generate_pseudo_depth.sh` (requires manual Kitti15 weight download).
 
-### 3. Generate dynamic labels
+### 3. Dynamic / static classification
 
-Requires MeMFlow optical flow weights (also not in repo). See [preprocessing/README.md](preprocessing/README.md) → Dynamic Static Filtering.
+| Stage | How dynamic/static is determined |
+|-------|----------------------------------|
+| **Training** | Online from 3D bbox GT velocity (`\|\|v\|\| >= 0.20 m/frame`); no `dynamic_mask.txt` at train time |
+| **Validator** | Reads `dynamic_mask.txt` from `DYNAMIC_DIRNAME` (Step1 + Step3) |
+| **Offline export** | `preprocessing/Dynamic_Labels` writes txt for validator use |
 
-Output: `{DATASET_ROOT}/dynamic_attributes_est/syncXX/dynamic_mask.txt`
+**Recommended workflow** (generate → verify → evaluate):
+
+```bash
+# 1. Export dynamic_mask.txt (same rule as training: 0.20 m/frame)
+python -m preprocessing.Dynamic_Labels.pipeline --config sequence_00
+# or all 9 sequences:
+sh preprocessing/scripts/generate_dynamic_labels.sh
+
+# 2. Quality gate — compare against legacy labels
+python scripts/compare_dynamic_mask_gt.py --config sequence_00
+python scripts/sweep_dynamic_threshold_global.py   # optional global sweep
+
+# 3. Run validator with generated labels
+export ROOT_DIRNAME=/path/to/KITTI360_For_Upload
+export CKPT_DIRNAME=/path/to/trainer/ckpts/your_run
+export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est_gt
+sh validator/make_predictions_scripts/run_evaluation_pipeline.sh
+```
+
+Output path: `{DATASET.ROOT}/dynamic_attributes_est_gt/syncXX/dynamic_mask.txt`  
+Legacy reference (comparison only): `dynamic_attributes_est/syncXX/dynamic_mask.txt`
+
+See [preprocessing/Dynamic_Labels/](preprocessing/Dynamic_Labels/), [preprocessing/Initial_Attributes/](preprocessing/Initial_Attributes/), and [validator/](validator/README.md).
 
 ---
 
@@ -174,10 +201,13 @@ VSRD++ follows a **two-stage pipeline**:
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │  Preprocessing  │ --> │  Stage 1:        │ --> │  Stage 2:       │
-│  - Flow/Depth   │     │  Multi-View      │     │  Monocular 3D   │
-│  - Dynamic Mask │     │  Auto-Labeling    │     │  Detection      │
-│  - Attributes   │     │  (VSRD++)         │     │  Training       │
+│  - Depth        │     │  Multi-View      │     │  Monocular 3D   │
+│  - Dynamic txt  │     │  Auto-Labeling   │     │  Detection      │
+│  - Attributes   │     │  (VSRD++)        │     │  Training       │
 └─────────────────┘     └──────────────────┘     └─────────────────┘
+         │                        ▲
+         │  dynamic_mask.txt      │  online GT velocity (train)
+         └────────────────────────┘  txt file (validator)
 ```
 
 ---
@@ -215,42 +245,19 @@ Edit the script to configure:
 
 ### Phase 1: Preprocessing
 
-#### 1.1 Dynamic/Static Classification
+#### 1.1 Pseudo depth (required for attribute init)
 
-Generate dynamic masks using optical flow and depth consistency:
+Generate pseudo depth with WAFT-Stereo (see [Quick Start §2](#2-generate-pseudo-depth-waft-stereo-recommended) and [preprocessing/README.md](preprocessing/README.md)).
 
-```bash
-
-# Step 1: Generate GT dynamic labels
-python dynamic_mask_gt_generataion.py \
-    --seed 1234 \
-    --neighbour_sample 16 \
-    --image_folder $image_folder \
-    --filename_folder $filename_folder \
-    --saved_folder $saved_folder \
-    --use_multi_thread
-
-# Step 2: Estimate dynamic masks using flow/depth
-python preprocess.py \
-    --seed 1234 \
-    --neighbour_sample 16 \
-    --image_folder $image_folder \
-    --filename_folder $filename_folder \
-    --saved_folder $saved_folder \
-    --optical_flow_model_path $flow_model_path \
-    --use_multi_thread
-```
-
-**Required Models (not shipped in repo — see `.gitignore`):**
-- **Optical Flow**: [MeMFlow (CVPR 2024)](https://github.com/DQiaole/MemFlow) — download `.pth` to `preprocessing/optical_flow_estimation/MeMFlow/ckpts/`
+**Required models (not shipped in repo — see `.gitignore`):**
 - **Depth**: [WAFT-Stereo](https://github.com/MemorySlices/WAFT-Stereo) (recommended) or [LEAStereo](https://github.com/XuelianCheng/LEAStereo) (legacy)
 
-#### 1.2 Initial Attribute Estimation
+#### 1.2 Initial attribute estimation
 
-Get initial 3D attributes (location, orientation, velocity) from LiDAR:
+Used at training time via `estimate_initial_attributes()` (depth + RoI LiDAR + ICP). Smoke test:
 
 ```bash
-python Get_Initial_Attributes.py
+python -m preprocessing.Initial_Attributes.pipeline
 ```
 
 This step provides:
@@ -258,21 +265,18 @@ This step provides:
 - Initial velocity from ICP
 - Location and orientation from ROI LiDAR + velocity
 
-#### 1.3 Depth Estimation
+Legacy LEAStereo depth: `sh preprocessing/scripts/generate_pseudo_depth.sh 0006` — see [preprocessing/README.md](preprocessing/README.md).
 
-Generate pseudo depth with WAFT-Stereo (recommended):
+#### 1.3 Dynamic label export (for validator)
 
-```bash
-sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
-```
-
-Legacy LEAStereo:
+Training infers dynamic/static online; validator reads `dynamic_mask.txt`. Generate and verify before evaluation:
 
 ```bash
-sh preprocessing/scripts/generate_pseudo_depth.sh 0006
+sh preprocessing/scripts/generate_dynamic_labels.sh
+python scripts/compare_dynamic_mask_gt.py --config sequence_00
 ```
 
-Details: [preprocessing/README.md](preprocessing/README.md).
+See [preprocessing/Dynamic_Labels/README.md](preprocessing/Dynamic_Labels/README.md).
 
 ### Phase 2: Stage 1 - Multi-View 3D Auto-Labeling
 
@@ -304,7 +308,7 @@ Key fields in `base.json`:
 }
 ```
 
-Per-sequence paths (`FILENAMES`, `DYNAMIC_LABELS_PATH`) are relative to `DATASET.ROOT` in `sequence_XX.json`.
+Per-sequence paths (`FILENAMES`) are relative to `DATASET.ROOT` in `sequence_XX.json`.
 
 #### 2.2 Training
 
@@ -319,19 +323,32 @@ python train_sequence_ddp.py \
 
 ### Phase 3: Evaluation Pipeline
 
+> **Prerequisite:** generate `dynamic_attributes_est_gt/` and pass `compare_dynamic_mask_gt.py` before pointing validator at the new labels. See [validator/README.md](validator/README.md).
+
 #### 3.1 Unified Evaluation Pipeline (Recommended)
 
-Run all evaluation steps in one command:
-
 ```bash
+export ROOT_DIRNAME=/path/to/KITTI360_For_Upload
+export CKPT_DIRNAME=/path/to/trainer/ckpts/your_run
+export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est_gt
+
 cd validator/make_predictions_scripts
 sh run_evaluation_pipeline.sh
 ```
 
+Environment variables (all optional — defaults in shell scripts):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ROOT_DIRNAME` | KITTI360 root | Dataset root |
+| `CKPT_DIRNAME` | `trainer/ckpts` | Trained checkpoint directory |
+| `DYNAMIC_DIRNAME` | `{ROOT}/dynamic_attributes_est_gt` | `syncXX/dynamic_mask.txt` parent dir |
+| `INPUT_MODEL_TYPE` | `velocity_with_init` | Model type for prediction export |
+
 This executes:
-1. **Step 1**: Generate predictions and GT in JSON format
+1. **Step 1**: Generate predictions and GT in JSON format (reads `dynamic_mask.txt`)
 2. **Step 2**: Convert to KITTI3D `.txt` format
-3. **Step 3**: Assign dynamic/static labels
+3. **Step 3**: Assign dynamic flags to GT KITTI labels (same `dynamic_mask.txt`)
 4. **Step 4**: Organize into KITTI3D dataset structure
 
 #### 3.2 Manual Evaluation Steps
@@ -349,9 +366,10 @@ sh make_prediction.sh
 sh convert_into_kitti_format.sh
 ```
 
-**Step 3: Dynamic Attribute Assignment**
+**Step 3: Dynamic Attribute Assignment** (reads `dynamic_mask.txt`, same as Step 1)
 
 ```bash
+export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est_gt
 sh dynamic_attribute.sh
 ```
 
@@ -408,6 +426,14 @@ python train_sequence_ddp.py \
 
 ## 📊 Evaluation
 
+### Dynamic label scripts
+
+| Script | Purpose |
+|--------|---------|
+| `preprocessing/scripts/generate_dynamic_labels.sh` | Batch-export `dynamic_mask.txt` for all sequences |
+| `scripts/compare_dynamic_mask_gt.py` | Per-sequence accuracy vs legacy labels |
+| `scripts/sweep_dynamic_threshold_global.py` | Global threshold sweep (9 sequences) |
+
 ### Visualization
 
 #### Projected 3D Boxes Visualization
@@ -455,17 +481,18 @@ python train_sequence_ddp.py \
 
 Detailed documentation for each module:
 
+- **[preprocessing/](preprocessing/README.md)**: Data preparation
+  - Pseudo depth (WAFT-Stereo / LEAStereo)
+  - Initial attribute estimation (online dynamic/static)
+  - Dynamic label export (`Dynamic_Labels/`)
+
 - **[trainer/](trainer/README.md)**: Core training code for Stage 1
   - Multi-view 3D auto-labeling
   - Dynamic object modeling
   - Volumetric rendering
 
-  - Dynamic/static classification
-  - Optical flow and depth estimation
-  - Initial attribute estimation
-
 - **[validator/](validator/README.md)**: Evaluation tools and metrics
-  - Prediction generation
+  - Prediction generation (reads `dynamic_mask.txt`)
   - KITTI format conversion
   - IoU and mAP calculation
   - Visualization tools
@@ -487,12 +514,9 @@ Detailed documentation for each module:
 
 # Dynamic modeling settings
 _C.TRAIN.USE_RDF_MODELING = True
-_C.TRAIN.USE_DYNAMIC_MASK = True
+_C.TRAIN.USE_DYNAMIC_MASK = True  # per-instance dynamic/static from GT bbox velocity
 _C.TRAIN.USE_DYNAMIC_MODELING = True
 _C.TRAIN.DYNAMIC_MODELING_TYPE = 'vector_velocity'  # or 'mlp', 'scalar_velocity'
-
-# Dynamic labels path
-_C.TRAIN.DYNAMIC_LABELS_PATH = "<dataset_path>/dynamic_mask.txt"
 ```
 
 ---
@@ -500,7 +524,6 @@ _C.TRAIN.DYNAMIC_LABELS_PATH = "<dataset_path>/dynamic_mask.txt"
 
 ## 🙏 Acknowledgments
 
-- [MeMFlow](https://github.com/DQiaole/MemFlow) for optical flow estimation
 - [IGEVStereo](https://github.com/gangweix/IGEV) for depth estimation
 - [InternImage](https://github.com/OpenGVLab/InternImage) for 2D detection
 - [VSRD](https://github.com/Magicboomliu/VSRD) for providing the base of this code.

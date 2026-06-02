@@ -41,13 +41,12 @@ def read_image_tensor(image_path,device="cuda:0"):
     image = torch.from_numpy(image).permute(2,0,1).unsqueeze(0).to(device)
     return image
 
-def merge_for_visualization_version_1(pcds):
-    raw_pcd_set = []
-    for key in pcds.keys():
-        if pcds[key] is not None:
-            raw_pcd_set.append(pcds[key])
-            
-    return raw_pcd_set
+def merge_point_clouds_for_vis(pcds: dict) -> list:
+    """Collect non-empty RoI point clouds for visualization."""
+    return [points for points in pcds.values() if points is not None]
+
+
+merge_for_visualization_version_1 = merge_point_clouds_for_vis
 
 
 def visualize_point_cloud_with_axis(point_cloud,axis_vis=True,boxes_3d=None):

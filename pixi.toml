@@ -46,7 +46,7 @@ mkl = "==2023.2.0"
 [pypi-dependencies]
 vsrd_plus_plus = { path = ".", editable = true }
 kitti360scripts = "==1.0.0"
-yacs = ">=0.1"  # required by third-party preprocessing tools (MeMFlow, segmentation)
+yacs = ">=0.1"  # required by third-party preprocessing tools (segmentation)
 rich = ">=13.7"
 open3d = "*"
 # nerfacc is lazily imported only in the NerfAcc rendering path.

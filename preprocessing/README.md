@@ -1,175 +1,168 @@
-# Dynamic and Static Instance Classification using 2D Flow and Depth Consistency  
+# Preprocessing
 
-- [Slide Information](https://docs.google.com/presentation/d/1UQbSG551w6YL5kPY4Z2d0xizEkc1Kvn7/edit?usp=sharing&ouid=112605403951022205460&rtpof=true&sd=true)
+Data preparation for VSRD++ Stage 1 training.
 
+## Pipeline overview
 
-We distinguish the dyanmic and static by looking at the 2D movement observations, where depth denotes the Ego-Motion and Optical Flow denotes the full motion, their relationship can be descripted as follows:
+```
+pseudo depth (WAFT-Stereo)  ──►  estimate_initial_attributes  ──►  trainer (attribute init)
+                                  (depth + RoI LiDAR + ICP;
+                                   dynamic/static from GT bbox velocity)
 
-![image1](figures/figure1.png)
-
-## Get Pretrained Optical Flow and Depth Information
-
-### Optical Flow ([MeMFlow (CVPR24)](https://github.com/DQiaole/MemFlow))
-
-Download the [pretrained weight](https://github.com/DQiaole/MemFlow/releases/tag/v1.0.0), then use the MeMFlow inference code under `preprocessing/optical_flow_estimation/MeMFlow/`.
-
-Example (paths are machine-specific — update `model_path` accordingly):
-
-```python
-from preprocessing.APIs.optical_flow_estimator import Load_Optical_Flow_Model
-
-model_name = "MeMFlow"
-device = "cuda:0"
-model_path = "/path/to/MeMFlow/ckpts/MemFlowNet_kitti.pth"
-
-optical_processor, cfg = Load_Optical_Flow_Model(
-    model_name=model_name, device=device, model_path=model_path
-)
+sampled_image_filenames.txt  ──►  generate_dynamic_labels  ──►  dynamic_mask.txt (optional export)
+                                  (GT bbox velocity only; no images/depth)
 ```
 
-### Depth — WAFT-Stereo (recommended)
+- **Depth**: required by the initial-attribute pipeline (pseudo RoI LiDAR from depth maps).
+- **Dynamic / static (training)**: inferred online from annotated 3D bbox GT velocity (`||v|| >= 0.20 m/frame`); no `dynamic_mask.txt` required at train time.
+- **Dynamic labels (offline)**: optional pipeline writes `dynamic_attributes_est_gt/<sync>/dynamic_mask.txt` for validation or legacy tooling — see [Dynamic_Labels](Dynamic_Labels/README.md).
+- **Optical flow**: not used in the current preprocessing pipeline.
 
-Pseudo depth for VSRD++ training is stored as uint16 PNG (`value / 256` = depth in metres). The default output directory name includes the depth model, e.g. `pseudo_depth_ssl_waft_stereo/`.
+## Depth — WAFT-Stereo (recommended)
 
-We wrap [WAFT-Stereo](https://github.com/MemorySlices/WAFT-Stereo) in `preprocessing/apis/depth_estimator.py`. The model code lives in `preprocessing/disparity_estimation/WAFT-Stereo/` and has its **own pixi environment** (PyTorch ≥ 2.0). Run depth inference inside that environment, not the main VSRD++ pixi env.
+Pseudo depth is stored as uint16 PNG (`value / 256` = depth in metres). Default output directory: `pseudo_depth_ssl_waft_stereo/`.
 
-**Setup (once)**
+API: `preprocessing/apis/depth_estimator.py`  
+Model code: `preprocessing/disparity_estimation/WAFT-Stereo/` (separate pixi env, PyTorch ≥ 2.0).
+
+**Setup**
 
 ```bash
 cd preprocessing/disparity_estimation/WAFT-Stereo
 pixi install
-# Weights auto-download from HuggingFace on first run (ckpts/Real/DAv2L-5.pth)
 ```
 
-**Single-pair inference**
+**Batch generate**
+
+```bash
+# Single sequence (recommended first)
+sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
+
+# All sequences
+sh preprocessing/scripts/generate_pseudo_depth_waft.sh
+```
+
+**Single-pair API**
 
 ```python
 from preprocessing.apis.depth_estimator import Load_Depth_Model
 
 model = Load_Depth_Model("WAFT-Stereo", device="cuda:0")
-
-# left/right image paths, or numpy arrays (H×W×3)
-depth_m = model.infer(left_path, right_path)  # float32 (H, W), metres
-
-# KITTI360: auto-pair image_00 -> image_01
-depth_m = model.infer_from_left(
-    "data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000251.png"
-)
+depth_m = model.infer_from_left("data_2d_raw/.../image_00/data_rect/0000000251.png")
 ```
 
-**Batch generate pseudo depth for KITTI360**
-
-Set `DATASET_ROOT` in `trainer/configs/base.json` (`TRAIN.DATASET.ROOT`), then:
-
-```bash
-# All sequences → pseudo_depth_ssl_waft_stereo/
-sh preprocessing/scripts/generate_pseudo_depth_waft.sh
-
-# Single sequence
-sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
-
-# Custom output dir name
-OUTPUT_NAME=pseudo_depth_ssl_waft sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
-```
-
-Or from the WAFT pixi env:
-
-```bash
-cd preprocessing/disparity_estimation/WAFT-Stereo
-PYTHONPATH=<project_root> pixi run python -m preprocessing.apis.depth_estimator --seq 0006
-```
-
-Output layout (relative to dataset root, default dir name `pseudo_depth_ssl_waft_stereo`):
-
-```
-pseudo_depth_ssl_waft_stereo/
-└── 2013_05_28_drive_0000_sync/
-    └── image_00/data_rect/
-        ├── 0000000251.png   # uint16, depth_m = pixel / 256
-        └── ...
-```
-
-Default camera params for KITTI360: `fx=552.554261`, `baseline=0.5942 m`, depth clipped to `[0, 80] m`.
-
-**API reference (`preprocessing/apis/depth_estimator.py`)**
-
-| Function | Description |
-|----------|-------------|
-| `Load_Depth_Model("WAFT-Stereo", device=...)` | Load model, return `DepthModel` |
-| `model.infer(left, right)` | Stereo inference → depth (m) |
-| `model.infer_from_left(left_path)` | Auto `image_00` → `image_01` pairing |
-| `save_depth_png(depth_m, path)` | Save uint16 PNG for `pseudo_depth_ssl` |
-| `generate_pseudo_depth_sequence(seq_dir, ...)` | Batch one sequence |
+See `preprocessing/apis/depth_estimator.py` for full API.
 
 ### Depth — LEAStereo (legacy)
 
-[LEAStereo (NeurIPS20)](https://github.com/XuelianCheng/LEAStereo) is still available under `preprocessing/disparity_estimation/Leastereo/`. It requires manually downloading Kitti15 weights to `Leastereo/run/Kitti15/best/best.pth`.
+```bash
+sh preprocessing/scripts/generate_pseudo_depth.sh 0006
+```
+
+Requires Kitti15 weights at `Leastereo/run/Kitti15/best/best.pth`.
+
+---
+
+## Initial attribute estimation
+
+Used during Stage 1 training when attribute initialization is enabled (`TRAIN_DDP_VSRDPP`).  
+**Only uses pseudo depth** — no optical flow.
+
+### Pipeline
+
+```
+pseudo depth  →  build_roi_lidar  →  infer is_dynamic (GT bbox velocity)
+                                        ↓
+                              estimate_velocity_icp  →  estimate_location_orientation
+                                        ↓
+                              compute_gt_attributes (optional, from 3D bbox)
+```
+
+Entry point:
+
+```python
+from preprocessing.Initial_Attributes import estimate_initial_attributes
+
+multi_inputs = estimate_initial_attributes(
+    multi_inputs,
+    device="cuda:0",
+)
+```
+
+Or with explicit config:
+
+```python
+from preprocessing.Initial_Attributes import InitialAttributesPipeline, InitialAttributesConfig
+
+pipeline = InitialAttributesPipeline(InitialAttributesConfig(min_roi_points=120))
+multi_inputs = pipeline.run(multi_inputs)
+```
+
+Local smoke test:
 
 ```bash
-bash preprocessing/scripts/generate_pseudo_depth.sh        # all sequences
-bash preprocessing/scripts/generate_pseudo_depth.sh 0006  # one sequence
+python -m preprocessing.Initial_Attributes.pipeline --input Debug_Examples/exampleV2.pkl
 ```
 
+### Modules
 
-## Dynamic Static Filtering  
+| File | Role |
+|------|------|
+| `pipeline.py` | Orchestrates all steps |
+| `roi_lidar.py` | Step 1 — back-project depth to RoI point clouds |
+| `velocity.py` | Step 2 — ICP velocity per instance |
+| `location_orientation.py` | Step 3 — centroid location + velocity-based orientation |
+| `gt_attributes.py` | GT from 3D bounding boxes (debug / trainer fallback) |
 
-### Step1. Dyanmic Label Generation 
+Training scripts use `estimate_initial_attributes` + `extract_initial_attributes`:
 
-we generate the dyanmic by looking though a seqential image frames which contains the same instane IDs. We calcualte the mean translation error the bounding boxes at different frames with a threshold. The code can be shown as follows:  
+```python
+from preprocessing.Initial_Attributes import estimate_initial_attributes, extract_initial_attributes
 
-```
-cd preprocessing/dyanmic_static_filtering/
-python dynamic_mask_gt_generataion.py --seed 1234 \
-        --neighbour_sample 16 \
-        --image_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/data_2d_raw/ \
-        --filename_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/filenames/R50-N16-M128-B16 \
-        --saved_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/dynamic_attributes_est/ \
-        --use_multi_thread
-```
-
-### Step2. Get the Estimated Dyanmic Mask
-
-We using the depth and the optical flow warping consistency to distinguish the dyanmic or static using following scirpts:  
-
-```
-cd preprocessing/dyanmic_static_filtering/
-python preprocess.py --seed 1234 \
-        --neighbour_sample 16 \
-        --image_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/data_2d_raw/ \
-        --filename_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/filenames/R50-N16-M128-B16 \
-        --saved_folder /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload/dynamic_attributes_est/ \
-        --optical_flow_model_path /path/to/MeMFlow/ckpts/MemFlowNet_kitti.pth \
-        --use_multi_thread
+multi_inputs = estimate_initial_attributes(multi_inputs, device="cuda:0")
+init_attrs = extract_initial_attributes(multi_inputs, device="cuda:0")
+# init_attrs.is_dynamic — per-instance dynamic flags (||v|| >= 0.20 m/frame)
 ```
 
-### Step3. Evaluate (Precious / Recall)
-```
-cd preprocessing/dyanmic_static_filtering/
-python evaluation.py
-```
+Compare against legacy labels: `python scripts/compare_dynamic_mask_gt.py --config sequence_00`
 
+Depth path is resolved via `file_io_utils.get_depth_filename()` (`data_2d_raw` → `pseudo_depth_ssl` by default).
 
-### Optional: Debugger
-```
-cd preprocessing/dyanmic_static_filtering/
-python debugger.py
-```
-![GIF](figures/dynamic.gif)
+---
 
+## Dynamic label generation (optional)
 
+Offline export of per-instance dynamic flags in legacy `dynamic_mask.txt` format. Uses the same GT bbox velocity rule as training (`DEFAULT_DYNAMIC_VELOCITY_THRESHOLD = 0.20 m/frame`).
 
-### Attribute PreProcessing For Dynamic Objects
+**Purpose:** reproduce legacy-compatible labels for [validator](../validator/README.md) (Step1 + Step3 read txt; training does not).
 
-Just Test the Initial Attribute Preprocessing.   
+```bash
+# One sequence → {DATASET.ROOT}/dynamic_attributes_est_gt/<sync>/dynamic_mask.txt
+python -m preprocessing.Dynamic_Labels.pipeline --config sequence_00
 
-Totally is in 3 step:  
-- Step1: Get the Initial ROI LiDAR Point Cloud
-- Step2: Get the initial Velocity based on ICP and the LiDAR Point Cloud.  
-- Step3: Get the Location and the Orientation based on the ROI LiDAR Point Cloud and the Initial Velocity . 
+# All sequences
+sh preprocessing/scripts/generate_dynamic_labels.sh
 
-```
-python Get_Initial_Attributes.py
+# Quality gate (compare vs legacy dynamic_attributes_est/)
+python scripts/compare_dynamic_mask_gt.py --config sequence_00
+python scripts/sweep_dynamic_threshold_global.py
 ```
 
+```python
+from preprocessing.Dynamic_Labels import generate_dynamic_labels
 
+result = generate_dynamic_labels(
+    dataset_root="/path/to/KITTI360_For_Upload",
+    filenames_path="filenames/.../sampled_image_filenames.txt",
+    output_path="dynamic_attributes_est_gt/.../dynamic_mask.txt",
+)
+```
 
+Then point validator at the output:
+
+```bash
+export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est_gt
+sh validator/make_predictions_scripts/run_evaluation_pipeline.sh
+```
+
+See [Dynamic_Labels/README.md](Dynamic_Labels/README.md) for CLI options.

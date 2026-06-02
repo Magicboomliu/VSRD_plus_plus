@@ -3,56 +3,44 @@ import torch.nn as nn
 import torch.nn.functional as F
 import sys
 sys.path.append("../..")
+import cv2
 import open3d
 import numpy as np
 from sklearn.cluster import DBSCAN
+from sklearn.neighbors import KDTree
 from scipy.spatial import cKDTree
 
 
-def Obtain_Cluster_Single_PC(cam_points):
-    '''make sure the cam points is the torch'''
+def cluster_point_cloud(cam_points):
+    """DBSCAN cluster filter; keep the largest cluster."""
     cam_points = cam_points.cpu().numpy()
-    if len(cam_points)<10:
+    if len(cam_points) < 10:
         return None
-    cluster_index = DBSCAN(eps=0.8, min_samples=10, n_jobs=-1).fit_predict(cam_points)
 
+    cluster_index = DBSCAN(eps=0.8, min_samples=10, n_jobs=-1).fit_predict(cam_points)
     cam_points = cam_points[cluster_index > -1]
     cluster_index = cluster_index[cluster_index > -1]
 
     if len(cam_points) < 10:
         return None
 
-    cluster_set = set(cluster_index[cluster_index > -1])
-    cluster_sum = np.array([len(cam_points[cluster_index == i]) for i in cluster_set])
-    RoI_points = cam_points[cluster_index == np.argmax(cluster_sum)]
-    RoI_points = torch.from_numpy(RoI_points)
+    cluster_ids = set(cluster_index[cluster_index > -1])
+    cluster_sizes = np.array([len(cam_points[cluster_index == cid]) for cid in cluster_ids])
+    roi_points = cam_points[cluster_index == list(cluster_ids)[np.argmax(cluster_sizes)]]
+    return torch.from_numpy(roi_points)
 
-    return RoI_points
 
-def Convert_Disparity_to_Depth(disparity,baseline=0.60,focal_length=552.5543,mode=1):
-    depth = (baseline*focal_length)/(disparity + 1e-6)
-    if mode ==1:
-        max_value = 192
-    if mode==0:
-        max_value = 100
-    depth = torch.clamp(depth,min=0,max=max_value)
-    # depth = np.clip(depth,a_min=0,a_max=100)
-    return depth
+Obtain_Cluster_Single_PC = cluster_point_cloud
 
-from sklearn.neighbors import KDTree
 
-def compute_point_density(point_cloud, r):
-    # 检查点云是否为空
+def compute_point_density(point_cloud, radius):
+    """Count neighbors within ``radius`` for each point."""
     if point_cloud.shape[0] == 0:
         return torch.tensor([], device=point_cloud.device)
-    
-    # 将点云从 torch.Tensor 转换为 numpy 数组
+
     point_cloud_np = point_cloud.cpu().numpy()
-    # 构建 KD 树
     tree = KDTree(point_cloud_np)
-    # 查询每个点在半径 r 内的邻居数
-    densities = tree.query_radius(point_cloud_np, r, count_only=True) - 1  # 减去自身的点    
-    # 转换为 torch.Tensor 并返回
+    densities = tree.query_radius(point_cloud_np, radius, count_only=True) - 1
     return torch.tensor(densities, device=point_cloud.device)
 
 
@@ -76,6 +64,27 @@ def update_instance_masks(warp_error, instance_masks,ratio=0.0):
 
     updated_instance_masks = updated_masks_flat.view(B, N, H, W)
     return updated_instance_masks
+
+
+def shrink_masks_torch(instance_masks, shrink_ratio=0.1):
+    """Erode instance masks by a fraction of sqrt(mask area)."""
+    N, H, W = instance_masks.shape
+    shrunk_masks = torch.zeros_like(instance_masks)
+
+    for i in range(N):
+        mask = instance_masks[i].cpu().numpy()
+        mask_area = np.sum(mask > 0)
+        erode_kernel_size = int(np.sqrt(mask_area) * shrink_ratio)
+
+        if erode_kernel_size > 0:
+            kernel = np.ones((erode_kernel_size, erode_kernel_size), np.uint8)
+            eroded_mask = cv2.erode(mask.astype(np.uint8), kernel, iterations=1)
+        else:
+            eroded_mask = mask
+
+        shrunk_masks[i] = torch.tensor(eroded_mask, dtype=instance_masks.dtype)
+
+    return shrunk_masks
 
 
 def icp_translation_only(A, B, max_iterations=100, tolerance=1e-6):

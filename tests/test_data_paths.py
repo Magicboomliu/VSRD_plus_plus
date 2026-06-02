@@ -7,9 +7,7 @@ Checks that:
   3. Every FILENAMES txt file exists and is non-empty.
   4. Every path inside a FILENAMES txt resolves to a real image file
      (sampled, not exhaustive – first and last line per file).
-  5. DYNAMIC_LABELS_PATH exists and is non-empty.
-  6. Every path inside dynamic_mask.txt resolves to a real image file
-     (first and last line per file).
+  5. pseudo_depth_ssl coverage for sampled frames.
 
 Run from project root:
     pixi run pytest tests/test_data_paths.py -v
@@ -68,17 +66,6 @@ def _first_and_last(filepath):
 def _parse_filenames_line(line, dataset_root):
     """Parse a sampled_image_filenames.txt line → absolute image path."""
     # Format: <instance_ids> <image_path> <relative_indices>
-    parts = line.split(" ")
-    assert len(parts) >= 2, f"Unexpected line format: {line!r}"
-    img_path = parts[1]
-    if not os.path.isabs(img_path):
-        img_path = os.path.join(dataset_root, img_path)
-    return img_path
-
-
-def _parse_dynamic_mask_line(line, dataset_root):
-    """Parse a dynamic_mask.txt line → absolute image path."""
-    # Format: <instance_ids> <image_path> <labels>
     parts = line.split(" ")
     assert len(parts) >= 2, f"Unexpected line format: {line!r}"
     img_path = parts[1]
@@ -148,24 +135,7 @@ def test_filenames_image_paths_exist(name):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. DYNAMIC_LABELS_PATH exists and is non-empty
-# ─────────────────────────────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("name", SEQUENCE_CONFIGS)
-def test_dynamic_labels_path_exists(name):
-    cfg = load_config(name)
-    dyn_path = cfg.TRAIN.DYNAMIC_LABELS_PATH
-    if not os.path.isfile(dyn_path):
-        pytest.skip(f"Data not yet generated — dynamic_mask missing: {dyn_path}")
-    assert os.path.getsize(dyn_path) > 0, f"DYNAMIC_LABELS_PATH is empty: {dyn_path}"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 6. Image paths inside dynamic_mask.txt resolve to real files (first + last)
-# ─────────────────────────────────────────────────────────────────────────────
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 7. pseudo_depth_ssl coverage: every image in FILENAMES must have a depth PNG
+# 5. pseudo_depth_ssl coverage: every image in FILENAMES must have a depth PNG
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("name", SEQUENCE_CONFIGS)
@@ -188,17 +158,3 @@ def test_pseudo_depth_exists_for_sampled_frames(name):
             )
 
 
-@pytest.mark.parametrize("name", SEQUENCE_CONFIGS)
-def test_dynamic_mask_image_paths_exist(name):
-    cfg = load_config(name)
-    root = cfg.TRAIN.DATASET.ROOT
-    dyn_path = cfg.TRAIN.DYNAMIC_LABELS_PATH
-    if not os.path.isfile(dyn_path):
-        pytest.skip(f"Data not yet generated — dynamic_mask missing: {dyn_path}")
-    first, last = _first_and_last(dyn_path)
-    for line in (first, last):
-        img_path = _parse_dynamic_mask_line(line, root)
-        assert os.path.isfile(img_path), (
-            f"Image referenced in dynamic_mask.txt not found:\n  {img_path}\n"
-            f"  (line: {line[:80]})"
-        )

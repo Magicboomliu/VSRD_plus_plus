@@ -60,7 +60,7 @@ import json
 from configs import conf_val
 
 from trainer.utils.box_geo import decode_box_3d,divide_into_n_parts,get_dynamic_mask_for_the_world_output
-from trainer.utils.file_io import read_text_lines,read_complex_strings
+from preprocessing.Initial_Attributes import infer_dynamic_mask_from_multi_inputs
 import re
 
 
@@ -339,22 +339,9 @@ def Inference():
         nums_of_source_images_integrated_into_rendering = len(multi_inputs.keys())
         nums_of_instance_number = len(source_instance_ids_for_all_reference)
 
-        # get the static and dyanmic mask uisng proposed filetring algorithim.
-        dynamic_labels_for_target_view = dict()
-        dynamic_labels_for_target_view["instance_ids"] = []
-        dynamic_labels_for_target_view["dynamic_labels"] = []
-        if USE_DYNAMIC_MODELING_FLAG:
-            if USE_DYNAMIC_MASK_FLAG:
-                dynamic_raw_contents = read_text_lines(conf_val.TRAIN.DYNAMIC_LABELS_PATH)
-                for content in dynamic_raw_contents:
-                    content = content.strip()
-                    current_returned_dict = read_complex_strings(content, dataset_root=dataset_root)
-                    if current_returned_dict['filename'] == image_filename:
-                        dynamic_labels_for_target_view['instance_ids'] = current_returned_dict['instance_ids']
-                        dynamic_labels_for_target_view["dynamic_labels"] = current_returned_dict['labels']
-                
-                dynamic_mask_for_target_view = dynamic_labels_for_target_view['dynamic_labels']
-                dynamic_mask_for_target_view = [bool(int(float(data))) for data in dynamic_mask_for_target_view.split(",")]
+        dynamic_mask_for_target_view = None
+        if USE_DYNAMIC_MODELING_FLAG and USE_DYNAMIC_MASK_FLAG:
+            dynamic_mask_for_target_view = infer_dynamic_mask_from_multi_inputs(multi_inputs)
 
 
 
