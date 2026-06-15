@@ -11,6 +11,12 @@ import subprocess
 import logging
 from pathlib import Path
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from preprocessing.dataset_paths import DEFAULT_DYNAMIC_LABELS_DIRNAME
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -305,7 +311,7 @@ Examples:
         "--dynamic_dirname",
         type=str,
         default="",
-        help="Directory with syncXX/dynamic_mask.txt (e.g. dynamic_attributes_est_gt/)",
+        help=f"Directory with {DEFAULT_DYNAMIC_LABELS_DIRNAME}/<sequence>/dynamic_mask.txt",
     )
     parser.add_argument("--input_model_type", type=str, default="velocity_with_init",
                         help="Model type: vanilla, velocity, mlp, velocity_with_init")

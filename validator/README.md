@@ -2,45 +2,44 @@
 
 Evaluation pipeline for multi-view auto-labeling quality (IoU, mAP, visualization).
 
-**Dynamic labels:** Step1 and Step3 read `dynamic_mask.txt` from `DYNAMIC_DIRNAME`. Training uses online GT velocity; validator uses the exported txt file. See also the root [README.md](../README.md#3-dynamic--static-classification).
+**Defaults (aligned with preprocessing output):**
 
-## Dynamic labels workflow
+| Artifact | Path under `DATASET.ROOT` |
+|----------|---------------------------|
+| Pseudo depth | `pseudo_depth_ssl_waft_stereo/<sequence>/image_00/data_rect/` |
+| Dynamic labels | `dynamic_attributes_est_gt/<sequence>/dynamic_mask.txt` |
 
-Recommended flow before running validator:
+Legacy zip layout (`pseudo_depth_ssl/`, `dynamic_attributes_est/syncXX/`) is no longer the default.
+
+## Workflow
 
 ```bash
-# 1. Generate dynamic_mask.txt (GT bbox velocity, 0.20 m/frame)
+# 1. Depth
+sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
+
+# 2. Dynamic labels
 python -m preprocessing.Dynamic_Labels.pipeline --config sequence_07
-# or all sequences:
-sh preprocessing/scripts/generate_dynamic_labels.sh
+# or: sh preprocessing/scripts/generate_dynamic_labels.sh
 
-# 2. Compare against legacy labels (quality gate)
+# 3. Verify
 python scripts/compare_dynamic_mask_gt.py --config sequence_07
-python scripts/sweep_dynamic_threshold_global.py   # optional
 
-# 3. Run validator with generated labels
+# 4. Validator
 export ROOT_DIRNAME=/path/to/KITTI360_For_Upload
 export CKPT_DIRNAME=/path/to/trainer/ckpts/your_run
 export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est_gt
 sh validator/make_predictions_scripts/run_evaluation_pipeline.sh
 ```
 
-| Path | Role |
-|------|------|
-| `dynamic_attributes_est_gt/syncXX/` | Generated labels (recommended for validator) |
-| `dynamic_attributes_est/syncXX/` | Legacy reference (compare script ground truth) |
-
-To test against legacy labels directly: `export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est`
+Compare vs **legacy** labels: add `--dynamic-path dynamic_attributes_est/sync07/dynamic_mask.txt` to the compare script.
 
 ### Environment variables
-
-All shell scripts under `make_predictions_scripts/` accept overrides:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ROOT_DIRNAME` | KITTI360 dataset root | |
 | `CKPT_DIRNAME` | `trainer/ckpts` | Checkpoint directory for export |
-| `DYNAMIC_DIRNAME` | `{ROOT}/dynamic_attributes_est_gt` | Parent of `syncXX/dynamic_mask.txt` |
+| `DYNAMIC_DIRNAME` | `{ROOT}/dynamic_attributes_est_gt` | Parent of `<sequence>/dynamic_mask.txt` |
 | `INPUT_MODEL_TYPE` | `velocity_with_init` | Model architecture for JSON export |
 | `NUM_WORKERS` | `4` | Multiprocessing workers |
 
@@ -64,9 +63,7 @@ cd validator/make_predictions_scripts
 sh make_gt_prediction.sh
 ```
 
-Both Step1 scripts use `--dyanmic_root_filename $DYNAMIC_DIRNAME` to load per-instance dynamic flags.
-
-Output: `predictions/` (model pseudo labels) and checkpoint-derived GT JSON.
+Both read `{DYNAMIC_DIRNAME}/<sequence>/dynamic_mask.txt` (e.g. `.../2013_05_28_drive_0007_sync/dynamic_mask.txt`).
 
 ### Step2: Convert to KITTI3D `.txt` format
 
@@ -81,7 +78,7 @@ python ../tools/Predictions/convert_prediction.py \
 
 ### Step3: Dynamic attribute assignment for GT KITTI labels
 
-Reads the same `dynamic_mask.txt` as Step1 (not recomputed from neighbors).
+Reads the same `dynamic_mask.txt` as Step1.
 
 ```bash
 cd validator/make_predictions_scripts
@@ -95,17 +92,11 @@ cd validator/dataset_structure_configuration
 sh conversion_kitti3d_structure.sh
 ```
 
-### Step5: mIoU
+### Step5: mIoU / Step6: mAP
 
 ```bash
 cd validator/stage1_evaluation_scripts
 sh get_iou.sh
-```
-
-### Step6: mAP
-
-```bash
-cd validator/stage1_evaluation_scripts
 sh get_mAP.sh
 ```
 

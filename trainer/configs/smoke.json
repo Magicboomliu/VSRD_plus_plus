@@ -5,6 +5,11 @@
         "filenames/R50-N16-M128-B16/2013_05_28_drive_0000_sync/sampled_image_filenames.txt"
       ]
     },
-    "DYNAMIC_LABELS_PATH": "dynamic_attributes_est/sync00/dynamic_mask.txt"
+    "OPTIMIZATION_NUM_STEPS": 50,
+    "LOGGING": {
+      "CKPT_INTERVALS": 1000,
+      "IMAGE_INTERVALS": 1000,
+      "SCALAR_INTERVALS": 10
+    }
   }
 }

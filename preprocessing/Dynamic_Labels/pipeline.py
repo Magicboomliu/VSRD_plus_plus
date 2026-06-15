@@ -9,6 +9,10 @@ from tqdm import tqdm
 
 from preprocessing.Dynamic_Labels.format import format_dynamic_line, parse_filenames_line
 from preprocessing.Dynamic_Labels.multi_inputs import build_multi_from_annotations
+from preprocessing.dataset_paths import (
+    DEFAULT_DYNAMIC_LABELS_DIRNAME,
+    dynamic_mask_path_from_filenames_txt,
+)
 from preprocessing.Initial_Attributes.gt_attributes import (
     DEFAULT_DYNAMIC_VELOCITY_THRESHOLD,
     infer_dynamic_mask_from_gt_velocity,
@@ -143,7 +147,7 @@ if __name__ == "__main__":
         "--output",
         type=str,
         default="",
-        help="Output dynamic_mask.txt (default: dynamic_attributes_est_gt/<sync>/dynamic_mask.txt)",
+        help=f"Output dynamic_mask.txt (default: {DEFAULT_DYNAMIC_LABELS_DIRNAME}/<sequence>/dynamic_mask.txt)",
     )
     parser.add_argument("--threshold", type=float, default=DEFAULT_DYNAMIC_VELOCITY_THRESHOLD)
     parser.add_argument("--num-source-frames", type=int, default=0)
@@ -158,13 +162,7 @@ if __name__ == "__main__":
         if args.output:
             output_path = args.output
         else:
-            sync_name = os.path.basename(os.path.dirname(filenames_path))
-            output_path = os.path.join(
-                dataset_root,
-                "dynamic_attributes_est_gt",
-                sync_name,
-                "dynamic_mask.txt",
-            )
+            output_path = dynamic_mask_path_from_filenames_txt(filenames_path, dataset_root)
     else:
         if not args.dataset_root or not args.filenames or not args.output:
             parser.error("Provide --config or (--dataset-root, --filenames, --output)")

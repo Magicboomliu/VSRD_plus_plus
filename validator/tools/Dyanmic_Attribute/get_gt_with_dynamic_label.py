@@ -24,6 +24,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from validator.tools.dynamic_labels_io import (
+    DEFAULT_DYNAMIC_LABELS_DIRNAME,
     annotation_to_image_path,
     load_dynamic_mask_by_image,
     lookup_dynamic_labels,
@@ -208,6 +209,9 @@ def main(args):
         os.path.basename,
         sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*"))),
     ))
+    dynamic_dirname = args.dyanmic_root_filename
+    if not dynamic_dirname:
+        dynamic_dirname = os.path.join(args.root_dirname, DEFAULT_DYNAMIC_LABELS_DIRNAME)
 
     with multiprocessing.Pool(args.num_workers) as pool:
         with tqdm(total=len(sequences)) as progress_bar:
@@ -218,7 +222,7 @@ def main(args):
                 class_names=args.class_names,
                 json_folder=args.json_foldername,
                 output_labelname=args.output_labelname,
-                dynamic_dirname=args.dyanmic_root_filename,
+                dynamic_dirname=dynamic_dirname,
             ), sequences):
                 progress_bar.update(1)
 
@@ -236,7 +240,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dyanmic_root_filename",
         type=str,
-        required=True,
-        help="Directory containing syncXX/dynamic_mask.txt (e.g. dynamic_attributes_est_gt/)",
+        default="",
+        help=f"Parent of per-sequence dynamic_mask.txt (default: {{ROOT}}/{DEFAULT_DYNAMIC_LABELS_DIRNAME})",
     )
     main(parser.parse_args())

@@ -2,9 +2,8 @@
   "TRAIN": {
     "DATASET": {
       "FILENAMES": [
-        "filenames/R50-N16-M128-B16/2013_05_28_drive_10_sync/sampled_image_filenames.txt"
+        "filenames/R50-N16-M128-B16/2013_05_28_drive_0010_sync/sampled_image_filenames.txt"
       ]
-    },
-    "DYNAMIC_LABELS_PATH": "dynamic_attributes_est/sync10/dynamic_mask.txt"
+    }
   }
 }

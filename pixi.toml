@@ -63,15 +63,18 @@ test = "pytest tests/ -v"
 test-data = "pytest tests/test_data_paths.py -v"
 
 # --- Preprocessing ---
-# Generate pseudo depth maps for all sequences (requires Kitti15 weights — see script header)
-gen-depth = "bash preprocessing/scripts/generate_pseudo_depth.sh"
-# Generate depth for a single sequence, e.g.:  pixi run gen-depth-seq 0006
-gen-depth-seq = "bash preprocessing/scripts/generate_pseudo_depth.sh"
+# Generate pseudo depth (WAFT-Stereo; separate pixi env under WAFT-Stereo/)
+gen-depth = "bash preprocessing/scripts/generate_pseudo_depth_waft.sh"
+# Single sequence, e.g.: pixi run gen-depth-seq 0006
+gen-depth-seq = "bash preprocessing/scripts/generate_pseudo_depth_waft.sh"
+# Generate dynamic_mask.txt for all training sequences
+gen-dynamic = "bash preprocessing/scripts/generate_dynamic_labels.sh"
 
 # --- Stage 1: Optimization-based autolabeling ---
-train      = "python trainer/train_sequence_ddp.py"
-train-no-init = "python trainer/train_without_initial_sequence_ddp.py"
-train-ablation = "python trainer/train_sequence_ddp_ablations.py"
+train      = "python trainer/train.py"
+train-no-init = "python trainer/train_no_init.py"
+train-ablation = "python trainer/train_ablation.py"
 infer      = "python trainer/inference.py"
 evaluate   = "python trainer/evaluation.py"
-train-ddp  = "bash trainer/scripts/DDP_RUN.sh"
+train-shell = "bash trainer/scripts/train.sh"
+train-smoke = "bash trainer/scripts/train_smoke.sh"

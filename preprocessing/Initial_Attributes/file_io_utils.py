@@ -8,10 +8,13 @@ import sys
 from PIL import Image
 import open3d as o3d
 
+from preprocessing.dataset_paths import pseudo_depth_path_from_image
 
-LINE_INDICES = [[0, 1], [1, 2], [2, 3], [3, 0],
-                [4, 5], [5, 6], [6, 7], [7, 4],
-                [0, 4], [1, 5], [2, 6], [3, 7],]
+LINE_INDICES = [
+    [0, 1], [1, 2], [2, 3], [3, 0],
+    [4, 5], [5, 6], [6, 7], [7, 4],
+    [0, 4], [1, 5], [2, 6], [3, 7],
+]
 
 
 def read_pickle_file(pickle_file_path):
@@ -19,12 +22,9 @@ def read_pickle_file(pickle_file_path):
         loaded_dict = pickle.load(f)
     return loaded_dict
 
+
 def get_depth_filename(image_filename):
-    annotation_filename = (
-        image_filename
-        .replace("data_2d_raw", "pseudo_depth_ssl")
-    )
-    return annotation_filename
+    return pseudo_depth_path_from_image(image_filename)
 
 def read_depth(filename):
     depth = np.array(Image.open(filename))

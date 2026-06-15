@@ -2,7 +2,7 @@
 # Generate dynamic_mask.txt from GT bbox velocity (no images / depth).
 #
 # Output (default):
-#   {DATASET_ROOT}/dynamic_attributes_est_gt/<sync>/dynamic_mask.txt
+#   {DATASET_ROOT}/dynamic_attributes_est_gt/<sequence>/dynamic_mask.txt
 #
 # Usage (from project root):
 #   sh preprocessing/scripts/generate_dynamic_labels.sh              # all sequences

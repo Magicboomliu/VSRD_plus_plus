@@ -9,7 +9,10 @@ _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+from preprocessing.dataset_paths import DEFAULT_DYNAMIC_LABELS_DIRNAME
 from preprocessing.Dynamic_Labels.format import parse_dynamic_line
+
+DEFAULT_DYNAMIC_LABELS_PARENT = DEFAULT_DYNAMIC_LABELS_DIRNAME
 
 
 def resolve_dataset_path(root_dirname: str, path: str) -> str:
@@ -20,9 +23,12 @@ def resolve_dataset_path(root_dirname: str, path: str) -> str:
 
 
 def dynamic_mask_path(dynamic_dirname: str, sequence: str) -> str:
-    """Return ``{dynamic_dirname}/syncXX/dynamic_mask.txt`` for a sequence folder name."""
-    sync_name = "sync" + sequence[-7:-5]
-    return os.path.join(dynamic_dirname, sync_name, "dynamic_mask.txt")
+    """Return ``{dynamic_dirname}/{sequence}/dynamic_mask.txt``.
+
+    ``sequence`` is the folder name under ``data_2d_raw/`` (e.g.
+    ``2013_05_28_drive_0007_sync``), matching ``Dynamic_Labels`` output layout.
+    """
+    return os.path.join(dynamic_dirname, sequence, "dynamic_mask.txt")
 
 
 def load_dynamic_mask_by_instance_ids(

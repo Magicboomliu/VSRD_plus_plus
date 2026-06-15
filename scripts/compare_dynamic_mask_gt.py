@@ -26,12 +26,20 @@ def main():
     parser.add_argument("--config", default="sequence_00", help="Trainer config name")
     parser.add_argument("--threshold", type=float, default=DEFAULT_DYNAMIC_VELOCITY_THRESHOLD)
     parser.add_argument("--max-samples", type=int, default=0, help="0 = all frames")
+    parser.add_argument("--dynamic-path", type=str, default="",
+                        help="Override dynamic_mask.txt path (default: config DYNAMIC_LABELS_PATH). "
+                             "Compare vs legacy: .../dynamic_attributes_est/syncXX/dynamic_mask.txt")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
     root = cfg.TRAIN.DATASET.ROOT
     filenames_path = cfg.TRAIN.DATASET.FILENAMES[0]
-    dynamic_path = cfg.TRAIN.DYNAMIC_LABELS_PATH
+    if args.dynamic_path:
+        dynamic_path = args.dynamic_path
+        if not os.path.isabs(dynamic_path):
+            dynamic_path = os.path.join(root, dynamic_path)
+    else:
+        dynamic_path = cfg.TRAIN.DYNAMIC_LABELS_PATH
     num_source_frames = cfg.TRAIN.DATASET.NUM_SOURCE_FRAMES
 
     ds = KITTI360Dataset(
@@ -111,11 +119,12 @@ def main():
 
     print("=" * 60)
     print(f"Config: {args.config}")
+    print(f"Reference: {dynamic_path}")
     print(f"Threshold: {args.threshold} m/frame")
     print(f"Frames: {frame_total} (skipped {skipped})")
     print("=" * 60)
-    print("Confusion matrix (pred rows vs legacy cols):")
-    print(f"              legacy=0    legacy=1")
+    print("Confusion matrix (pred rows vs reference cols):")
+    print(f"              ref=0    ref=1")
     print(f"  pred=0        {tn:5d}       {fn:5d}")
     print(f"  pred=1        {fp:5d}       {tp:5d}")
     print()
@@ -124,15 +133,15 @@ def main():
     print(f"Dynamic precision:  {precision*100:.2f}%")
     print(f"Dynamic recall:     {recall*100:.2f}%")
     print(f"Dynamic F1:         {f1*100:.2f}%")
-    print(f"Legacy dynamic rate: {(tp+fn)/total*100:.2f}%  ({tp+fn}/{total})")
+    print(f"Reference dynamic rate: {(tp+fn)/total*100:.2f}%  ({tp+fn}/{total})")
     print(f"Pred dynamic rate:   {(tp+fp)/total*100:.2f}%  ({tp+fp}/{total})")
 
     if speed_when_legacy_static:
         arr = np.array(speed_when_legacy_static)
-        print(f"\nSpeed m/frame when legacy=0: med={np.median(arr):.6f} p95={np.percentile(arr,95):.6f} max={arr.max():.4f}")
+        print(f"\nSpeed m/frame when ref=0: med={np.median(arr):.6f} p95={np.percentile(arr,95):.6f} max={arr.max():.4f}")
     if speed_when_legacy_dyn:
         arr = np.array(speed_when_legacy_dyn)
-        print(f"Speed m/frame when legacy=1: med={np.median(arr):.6f} p95={np.percentile(arr,95):.6f} max={arr.max():.4f}")
+        print(f"Speed m/frame when ref=1: med={np.median(arr):.6f} p95={np.percentile(arr,95):.6f} max={arr.max():.4f}")
 
     print("\nSample disagreements:")
     for line in disagree_examples[:15]:

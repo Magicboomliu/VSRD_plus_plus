@@ -88,10 +88,9 @@ KITTI360_For_Upload/
 ├── data_2d_raw/              # RGB images (KITTI360)
 ├── annotations/              # 2D instance masks
 ├── filenames/                # Sampled frame lists (.txt, relative paths inside)
-├── pseudo_depth_ssl/         # Legacy pseudo depth (LEAStereo, optional)
-├── pseudo_depth_ssl_waft_stereo/  # WAFT-Stereo pseudo depth (recommended)
-├── dynamic_attributes_est/        # Legacy dynamic labels (reference / comparison)
-└── dynamic_attributes_est_gt/     # Generated dynamic labels (recommended for validator)
+├── pseudo_depth_ssl_waft_stereo/  # WAFT-Stereo pseudo depth (default for training & tests)
+├── dynamic_attributes_est/        # Legacy dynamic labels (optional reference)
+└── dynamic_attributes_est_gt/     # Generated dynamic labels (default in configs & validator)
 ```
 
 Filenames inside `.txt` files use **relative paths**; only `DATASET.ROOT` in config needs to change when moving machines.
@@ -100,7 +99,33 @@ Verify paths before training:
 
 ```bash
 pixi run test-data
+pytest tests/test_dataset_paths.py -v
 ```
+
+### Path conventions (single source of truth)
+
+All default on-disk paths are defined in `preprocessing/dataset_paths.py`:
+
+| Artifact | Default relative path | Used by |
+|----------|----------------------|---------|
+| Pseudo depth | `pseudo_depth_ssl_waft_stereo/<sequence>/image_00/data_rect/<frame>.png` | WAFT script, training attribute init, `pixi run test-data` |
+| Dynamic labels | `dynamic_attributes_est_gt/<sequence>/dynamic_mask.txt` | `Dynamic_Labels` pipeline, validator, `sequence_XX.json` → `DYNAMIC_LABELS_PATH` |
+
+`<sequence>` is the KITTI360 folder name (e.g. `2013_05_28_drive_0007_sync`).
+
+Legacy zip folders (`pseudo_depth_ssl/`, `dynamic_attributes_est/syncXX/`) remain optional for comparison only.
+
+### Data preparation checklist
+
+| Step | Required for | Command |
+|------|--------------|---------|
+| Set `DATASET.ROOT` | Everything | Edit `trainer/configs/base.json` |
+| WAFT pseudo depth | Attribute-init training | `sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006` or `pixi run gen-depth-seq 0006` |
+| Dynamic labels | Validator only | `python -m preprocessing.Dynamic_Labels.pipeline --config sequence_00` or `pixi run gen-dynamic` |
+| Verify paths | Before train/eval | `pixi run test-data` |
+| Compare dynamic | After generating labels | `python scripts/compare_dynamic_mask_gt.py --config sequence_00` |
+
+---
 
 ### 1. Download KITTI360 Dataset
 
@@ -141,14 +166,30 @@ sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
 
 # All sequences (slow — tens of hours)
 sh preprocessing/scripts/generate_pseudo_depth_waft.sh
+
+# Custom dataset root
+DATASET_ROOT=/path/to/KITTI360_For_Upload sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
 ```
 
-Output: `{DATASET_ROOT}/pseudo_depth_ssl_waft_stereo/<sequence>/image_00/data_rect/*.png`  
-Format: uint16 PNG, depth in metres = pixel value / 256.
+**Output path (default):**
+
+```text
+{DATASET_ROOT}/pseudo_depth_ssl_waft_stereo/<sequence>/image_00/data_rect/<frame>.png
+```
+
+Training, attribute init, and `pixi run test-data` all read this folder (`preprocessing/dataset_paths.py`).
+
+Pixi shortcuts (from project root, after WAFT `pixi install`):
+
+```bash
+pixi run gen-depth          # all sequences
+pixi run gen-depth-seq 0006 # one sequence
+pixi run gen-dynamic        # all dynamic_mask.txt files
+```
 
 See [preprocessing/README.md](preprocessing/README.md) for API usage (`preprocessing/apis/depth_estimator.py`).
 
-Legacy LEAStereo path: `sh preprocessing/scripts/generate_pseudo_depth.sh` (requires manual Kitti15 weight download).
+Legacy LEAStereo can write to `pseudo_depth_ssl/` via `preprocessing/disparity_estimation/Leastereo/` (optional).
 
 ### 3. Dynamic / static classification
 
@@ -166,19 +207,32 @@ python -m preprocessing.Dynamic_Labels.pipeline --config sequence_00
 # or all 9 sequences:
 sh preprocessing/scripts/generate_dynamic_labels.sh
 
-# 2. Quality gate — compare against legacy labels
-python scripts/compare_dynamic_mask_gt.py --config sequence_00
-python scripts/sweep_dynamic_threshold_global.py   # optional global sweep
+# Optional: custom threshold / dataset root (uses trainer/configs/base.json → DATASET.ROOT)
+THRESHOLD=0.20 sh preprocessing/scripts/generate_dynamic_labels.sh sequence_07
+```
 
-# 3. Run validator with generated labels
+**Output path (default):**
+
+```text
+{DATASET.ROOT}/dynamic_attributes_est_gt/2013_05_28_drive_0007_sync/dynamic_mask.txt
+```
+
+(`<sequence>` = folder name under `filenames/R50-N16-M128-B16/`, same as in config `DYNAMIC_LABELS_PATH`.)
+
+```bash
+# 2. Sanity check (online rule vs generated txt in config path)
+python scripts/compare_dynamic_mask_gt.py --config sequence_00
+
+# Compare vs legacy zip labels instead:
+python scripts/compare_dynamic_mask_gt.py --config sequence_00 \
+  --dynamic-path dynamic_attributes_est/sync00/dynamic_mask.txt
+
+# 3. Run validator (reads {ROOT}/dynamic_attributes_est_gt/<sequence>/)
 export ROOT_DIRNAME=/path/to/KITTI360_For_Upload
 export CKPT_DIRNAME=/path/to/trainer/ckpts/your_run
 export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est_gt
 sh validator/make_predictions_scripts/run_evaluation_pipeline.sh
 ```
-
-Output path: `{DATASET.ROOT}/dynamic_attributes_est_gt/syncXX/dynamic_mask.txt`  
-Legacy reference (comparison only): `dynamic_attributes_est/syncXX/dynamic_mask.txt`
 
 See [preprocessing/Dynamic_Labels/](preprocessing/Dynamic_Labels/), [preprocessing/Initial_Attributes/](preprocessing/Initial_Attributes/), and [validator/](validator/README.md).
 
@@ -216,28 +270,72 @@ VSRD++ follows a **two-stage pipeline**:
 
 ### Stage 1: Multi-View 3D Auto-Labeling Training
 
+Training entry points live under `trainer/`:
+
+| Script | Purpose |
+|--------|---------|
+| `train.py` | Standard VSRD++ (attribute init + online dynamic/static) |
+| `train_no_init.py` | Ablation: skip attribute initialization |
+| `train_ablation.py` | Mask-erode robustness (`--erode_ratio`) |
+| `train_sharded.py` | 64-way split training |
+| `train_legacy.py` | Deprecated; do not use for new runs |
+
+**Recommended (single GPU):**
+
 ```bash
-cd trainer/scripts
-sh DDP_RUN.sh
+cd trainer
+CUDA_VISIBLE_DEVICES=0 torchrun \
+    --rdzv_backend c10d --rdzv_endpoint localhost:29500 \
+    --nnodes 1 --nproc_per_node 1 \
+    train.py --config_path sequence_07 --device_id 0
 ```
 
-The script contains two training modes:
-- **`TRAIN_DDP_VSRDPP`**: With attribute initialization (IGEVStereo pretrained)
-- **`TRAIN_DDP_VSRD_SIMPLE`**: Without attribute initialization
+From repo root via pixi:
+
+```bash
+pixi run train -- --config_path sequence_07 --device_id 0
+pixi run train-no-init -- --config_path sequence_07 --device_id 0
+pixi run train-ablation -- --config_path ablation_selective --device_id 0 --erode_ratio 0.03
+```
+
+Shell helpers in `trainer/scripts/` (mirror the Python entry points):
+
+| Script | Calls |
+|--------|--------|
+| `train.sh` | `train.py` (default) or `train_no_init.py` via `run_with_init` / `run_no_init` |
+| `train_smoke.sh` | Single-GPU smoke test with `train.py` |
+| `train_ablation.sh` | `train_ablation.py` + `--erode_ratio` |
+| `train_sharded.sh` | `train_sharded.py` for SPLITS64 |
+| `train_tsubame.sh` | Tsubame cluster job wrapper for `train.py` |
+
+```bash
+cd trainer/scripts
+sh train.sh              # default: with attribute init
+# or switch mode inside train.sh: run_no_init
+
+ERODE_RATIO=0.05 sh train_ablation.sh
+pixi run train-shell     # same as train.sh from repo root
+pixi run train-smoke
+```
+
+`--config_path` accepts a config stem (`sequence_07`, `ablation_selective`) or bare sequence id (`07` → `sequence_07.json`).
 
 ### Stage 1: Ablation Studies
 
-For ablation studies with custom configurations:
+For mask-quality ablations with custom erode ratios:
 
 ```bash
 cd trainer/scripts
-sh DDP_RUN_ROUND1_ABLATION.sh
+ERODE_RATIO=0.03 CONFIG_PATH=ablation_selective sh train_ablation.sh
+
+# from repo root:
+ERODE_RATIO=0.03 CONFIG_PATH=ablation_selective bash trainer/scripts/train_ablation.sh
 ```
 
-Edit the script to configure:
-- `CONFIG_PATH`: Configuration identifier
-- `ERODE_RATIO`: Mask erode ratio (0.0-1.0) for robustness testing
-- `CKPT_DIRNAME`, `LOG_DIRNAME`, `OUT_DIRNAME`: Custom output paths
+Optional environment variables:
+- `CONFIG_PATH`: e.g. `ablation_selective`
+- `ERODE_RATIO`: mask erode ratio (0.0–1.0)
+- `CKPT_DIRNAME`, `LOG_DIRNAME`, `OUT_DIRNAME`: custom output paths
 
 ---
 
@@ -261,11 +359,12 @@ python -m preprocessing.Initial_Attributes.pipeline
 ```
 
 This step provides:
-- Initial ROI LiDAR point clouds
+- Initial ROI LiDAR point clouds (from `pseudo_depth_ssl_waft_stereo/`)
 - Initial velocity from ICP
 - Location and orientation from ROI LiDAR + velocity
+- Dynamic/static flags online (`||v|| >= 0.20 m/frame`; no txt at train time)
 
-Legacy LEAStereo depth: `sh preprocessing/scripts/generate_pseudo_depth.sh 0006` — see [preprocessing/README.md](preprocessing/README.md).
+See [preprocessing/Initial_Attributes/README.md](preprocessing/Initial_Attributes/README.md).
 
 #### 1.3 Dynamic label export (for validator)
 
@@ -286,12 +385,18 @@ Configs are JSON under `trainer/configs/`:
 
 ```
 trainer/configs/
-├── base.json           # defaults + DATASET.ROOT
-├── sequence_00.json    # per-sequence overrides (relative paths)
-└── ...
+├── base.json              # defaults + DATASET.ROOT (edit this first)
+├── sequence_XX.json       # one sequence per file (FILENAMES only)
+├── smoke.json             # quick smoke test (sequence_00, 50 steps)
+├── ablation_selective.json
+├── ablation_full.json
+├── inference.json
+└── SPLITS64/split_sub.json
 ```
 
-Load in code: `from trainer.configs import load_config; cfg = load_config("00")`
+`DYNAMIC_LABELS_PATH` is **auto-derived** from `FILENAMES` for standard sequences (`dynamic_attributes_est_gt/<sequence>/dynamic_mask.txt`). Custom ablation/split configs set it explicitly.
+
+Load in code: `from trainer.configs import load_config; cfg = load_config("07")`
 
 Key fields in `base.json`:
 
@@ -308,17 +413,23 @@ Key fields in `base.json`:
 }
 ```
 
-Per-sequence paths (`FILENAMES`) are relative to `DATASET.ROOT` in `sequence_XX.json`.
+Per-sequence paths (`FILENAMES`, `DYNAMIC_LABELS_PATH`) are relative to `DATASET.ROOT` in `sequence_XX.json`. See [preprocessing/dataset_paths.py](preprocessing/dataset_paths.py).
 
 #### 2.2 Training
 
-Standard training command:
+Standard command (from `trainer/`):
 
 ```bash
-python train_sequence_ddp.py \
-    --config_path "00" \
-    --device_id 0
+cd trainer
+CUDA_VISIBLE_DEVICES=0 torchrun \
+    --rdzv_backend c10d --rdzv_endpoint localhost:29500 \
+    --nnodes 1 --nproc_per_node 1 \
+    train.py --config_path sequence_07 --device_id 0
 ```
+
+Notes:
+- **Pseudo depth** under `pseudo_depth_ssl_waft_stereo/` is required when attribute initialization is enabled (default in `train.py`).
+- **Dynamic labels** are **not** read at train time; motion is inferred online from 3D bbox GT velocity. Generate `dynamic_attributes_est_gt/` only before validator evaluation.
 
 
 ### Phase 3: Evaluation Pipeline
@@ -342,7 +453,7 @@ Environment variables (all optional — defaults in shell scripts):
 |----------|---------|---------|
 | `ROOT_DIRNAME` | KITTI360 root | Dataset root |
 | `CKPT_DIRNAME` | `trainer/ckpts` | Trained checkpoint directory |
-| `DYNAMIC_DIRNAME` | `{ROOT}/dynamic_attributes_est_gt` | `syncXX/dynamic_mask.txt` parent dir |
+| `DYNAMIC_DIRNAME` | `{ROOT}/dynamic_attributes_est_gt` | Parent of `<sequence>/dynamic_mask.txt` |
 | `INPUT_MODEL_TYPE` | `velocity_with_init` | Model type for prediction export |
 
 This executes:
@@ -397,16 +508,41 @@ sh get_mAP.sh
 
 ## ⚙️ Configuration
 
+### Training scripts & pixi tasks
+
+| Entry | Command |
+|-------|---------|
+| Standard train | `pixi run train -- --config_path sequence_07 --device_id 0` |
+| No attribute init | `pixi run train-no-init -- --config_path sequence_07 --device_id 0` |
+| Mask erode ablation | `pixi run train-ablation -- --config_path ablation_selective --device_id 0 --erode_ratio 0.03` |
+| Shell launcher | `pixi run train-shell` → `trainer/scripts/train.sh` |
+| Smoke test | `pixi run train-smoke` → `trainer/scripts/train_smoke.sh` |
+
 ### Training Script Arguments
 
+Run from `trainer/` (or prefix paths with `trainer/` when using pixi from repo root):
+
 ```bash
-python train_sequence_ddp.py \
-    --config_path "00" \                     # Config identifier
-    --device_id 0 \                          # CUDA device ID
-    --ckpt_dirname "<HOME>/ckpts" \         # Custom checkpoint directory
-    --log_dirname "<HOME>/logs" \            # Custom log directory
-    --out_dirname "<HOME>/outputs"           # Custom output directory
+cd trainer
+CUDA_VISIBLE_DEVICES=0 torchrun \
+    --rdzv_backend c10d --rdzv_endpoint localhost:29500 \
+    --nnodes 1 --nproc_per_node 1 \
+    train.py \
+    --config_path sequence_07 \
+    --device_id 0 \
+    --ckpt_dirname "/path/to/ckpts" \
+    --log_dirname "/path/to/logs" \
+    --out_dirname "/path/to/outputs"
 ```
+
+| Argument | Description |
+|----------|-------------|
+| `--config_path` | Config stem: `sequence_07`, `ablation_selective`, or bare id `07` |
+| `--device_id` | CUDA device index |
+| `--ckpt_dirname` | Override checkpoint directory (optional) |
+| `--log_dirname` | Override log directory (optional) |
+| `--out_dirname` | Override output directory (optional) |
+| `--erode_ratio` | (`train_ablation.py` only) mask erode ratio for robustness tests |
 
 ### Dynamic Modeling Types
 
@@ -430,9 +566,12 @@ python train_sequence_ddp.py \
 
 | Script | Purpose |
 |--------|---------|
-| `preprocessing/scripts/generate_dynamic_labels.sh` | Batch-export `dynamic_mask.txt` for all sequences |
-| `scripts/compare_dynamic_mask_gt.py` | Per-sequence accuracy vs legacy labels |
+| `preprocessing/scripts/generate_pseudo_depth_waft.sh` | Batch WAFT depth → `pseudo_depth_ssl_waft_stereo/` |
+| `preprocessing/scripts/generate_dynamic_labels.sh` | Batch dynamic txt → `dynamic_attributes_est_gt/` |
+| `scripts/compare_dynamic_mask_gt.py` | Online rule vs reference `dynamic_mask.txt` (default: config path) |
 | `scripts/sweep_dynamic_threshold_global.py` | Global threshold sweep (9 sequences) |
+| `pixi run gen-depth` / `gen-depth-seq` / `gen-dynamic` | Pixi wrappers for preprocessing |
+| `pixi run train` / `train-no-init` / `train-ablation` / `train-shell` / `train-smoke` | Pixi wrappers for Stage 1 training |
 
 ### Visualization
 
@@ -464,15 +603,17 @@ sh visualization_bev.sh
 
 ### Custom Output Directories
 
-Specify custom paths for checkpoints, logs, and outputs:
-
 ```bash
-python train_sequence_ddp.py \
-    --config_path "ablation_selective" \
+cd trainer
+CUDA_VISIBLE_DEVICES=0 torchrun \
+    --rdzv_backend c10d --rdzv_endpoint localhost:29500 \
+    --nnodes 1 --nproc_per_node 1 \
+    train.py \
+    --config_path ablation_selective \
     --device_id 0 \
-    --ckpt_dirname "<HOME>/ckpts" \
-    --log_dirname "<HOME>/logs" \
-    --out_dirname "<HOME>/outputs"
+    --ckpt_dirname "/path/to/ckpts" \
+    --log_dirname "/path/to/logs" \
+    --out_dirname "/path/to/outputs"
 ```
 
 ---
@@ -487,9 +628,8 @@ Detailed documentation for each module:
   - Dynamic label export (`Dynamic_Labels/`)
 
 - **[trainer/](trainer/README.md)**: Core training code for Stage 1
-  - Multi-view 3D auto-labeling
-  - Dynamic object modeling
-  - Volumetric rendering
+  - `train.py`, `train_no_init.py`, `train_ablation.py`, `train_sharded.py`
+  - Multi-view 3D auto-labeling, dynamic object modeling, volumetric rendering
 
 - **[validator/](validator/README.md)**: Evaluation tools and metrics
   - Prediction generation (reads `dynamic_mask.txt`)
@@ -509,15 +649,20 @@ Detailed documentation for each module:
 
 ### Configuration Example
 
-```python
-# In trainer/configs/train_config_*.py
+Edit `trainer/configs/base.json` or a per-sequence file such as `sequence_07.json`:
 
-# Dynamic modeling settings
-_C.TRAIN.USE_RDF_MODELING = True
-_C.TRAIN.USE_DYNAMIC_MASK = True  # per-instance dynamic/static from GT bbox velocity
-_C.TRAIN.USE_DYNAMIC_MODELING = True
-_C.TRAIN.DYNAMIC_MODELING_TYPE = 'vector_velocity'  # or 'mlp', 'scalar_velocity'
+```json
+{
+  "TRAIN": {
+    "USE_RDF_MODELING": true,
+    "USE_DYNAMIC_MASK": true,
+    "USE_DYNAMIC_MODELING": true,
+    "DYNAMIC_MODELING_TYPE": "vector_velocity"
+  }
+}
 ```
+
+`DYNAMIC_MODELING_TYPE`: `mlp`, `vector_velocity`, or `scalar_velocity`.
 
 ---
 

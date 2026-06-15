@@ -28,6 +28,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from validator.tools.dynamic_labels_io import (
+    DEFAULT_DYNAMIC_LABELS_PARENT,
     load_dynamic_mask_by_instance_ids,
     resolve_dataset_path,
 )
@@ -115,6 +116,9 @@ LINE_INDICES = [
 def main(args):
 
     sequences = list(map(os.path.basename, sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*")))))
+    dynamic_dirname = args.dyanmic_root_filename
+    if not dynamic_dirname or dynamic_dirname == "None":
+        dynamic_dirname = os.path.join(args.root_dirname, DEFAULT_DYNAMIC_LABELS_PARENT)
     # dynamic_seqences = [sequences[2],sequences[6]] # for ablation studies
     dynamic_seqences = sequences # for all the results
 
@@ -128,7 +132,7 @@ def main(args):
                 ckpt_filename=args.ckpt_filename,
                 split_dirname=args.split_dirname,
                 class_names=args.class_names,
-                dynamic_dirname=args.dyanmic_root_filename,
+                dynamic_dirname=dynamic_dirname,
                 input_model_type=args.input_model_type,
                 saved_pseudo_folder_path=args.saved_pseudo_folder_path,
             ), dynamic_seqences):
@@ -1183,7 +1187,8 @@ if __name__=="__main__":
     parser.add_argument("--root_dirname", type=str, default="/media/zliu/data12/dataset/VSRD_PP_Sync/")
     parser.add_argument("--ckpt_dirname", type=str, default="ckpts/kitti_360/vsrd_plus_plus")
     parser.add_argument("--ckpt_filename", type=str, default="step_2999.pt")
-    parser.add_argument("--dyanmic_root_filename",type=str,default="None")
+    parser.add_argument("--dyanmic_root_filename", type=str, default="",
+                        help=f"Parent dir of per-sequence dynamic_mask.txt (default: {{ROOT}}/{DEFAULT_DYNAMIC_LABELS_PARENT})")
     parser.add_argument("--input_model_type",type=str,default="None",help="Selected from [vanilla,velocity,mlp,velocity_with_init]")
     parser.add_argument("--saved_pseudo_folder_path",type=str,default="predictions",
                         help="Selected from [vanilla,velocity,mlp,velocity_with_init]")

@@ -1,5 +1,8 @@
 import os
 import argparse
+import sys
+sys.path.append("..")
+from trainer.configs import conf_train
 
 import re
 import json
@@ -11,9 +14,8 @@ import logging
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torchvision
-
+import cv2 as cv
 import numpy as np
 import scipy as sp
 import torch.optim as optim
@@ -22,8 +24,6 @@ import copy
 import inflection
 import torch.utils.tensorboard
 
-import sys
-sys.path.append("..")
 # VSRD Dataset
 from vsrd_plus_plus.utils import collate_nested_dicts,Dict,ProgressMeter,StopWatch
 from vsrd_plus_plus import utils
@@ -31,13 +31,22 @@ from torch.utils.data import Dataset, DataLoader
 from vsrd_plus_plus.datasets.kitti360_dataset import KITTI360Dataset
 from vsrd_plus_plus.datasets.transforms import Resizer,MaskAreaFilter,MaskRefiner,BoxGenerator,BoxSizeFilter,SoftRasterizer
 
+
 # VSRD Networks
 from vsrd_plus_plus.models.dynamic_fields.box_residual import BoxParameters3DRBN,ResidualBoxPredictor
 from vsrd_plus_plus.models.detectors.box_parameters_with_velocity import BoxParameters3D_With_Velocity
 from vsrd_plus_plus.models.detectors.box_parameters_with_scalar_velocity import BoxParameters3D_With_Scalar_Velocity
 from vsrd_plus_plus.models.detectors.box_parameters import BoxParameters3D
+
 from vsrd_plus_plus.models.fields import HyperDistanceField
 from vsrd_plus_plus.models.encoders import SinusoidalEncoder
+
+
+import vsrd_plus_plus
+import vsrd_plus_plus.distributed
+import multiprocessing
+from vsrd_plus_plus.distributed.loader import DistributedDataLoader
+
 
 # rendering
 from vsrd_plus_plus.rendering.utils import ray_casting
@@ -51,25 +60,11 @@ from tqdm import tqdm
 import datetime
 from vsrd_plus_plus import visualization
 
-from trainer.utils.box_geo import decode_box_3d,divide_into_n_parts,get_dynamic_mask_for_the_world_output,get_dynamic_sequentail_for_the_world_output
-from trainer.utils.file_io import read_text_lines,read_complex_strings
-from preprocessing.Initial_Attributes import estimate_initial_attributes, extract_initial_attributes
+
+from trainer.utils.box_geo import decode_box_3d,divide_into_n_parts,get_dynamic_mask_for_the_world_output
+from preprocessing.Initial_Attributes import infer_dynamic_mask_from_multi_inputs
 import re
 
-import vsrd_plus_plus
-import vsrd_plus_plus.distributed
-import multiprocessing
-from vsrd_plus_plus.distributed.loader import DistributedDataLoader
-
-# Initialization
-import argparse
-
-
-import pickle
-def read_pickle_file(pickle_file_path):
-    with open(pickle_file_path, 'rb') as f:
-        loaded_dict = pickle.load(f)
-    return loaded_dict
 
 LINE_INDICES = [
     [0, 1], [1, 2], [2, 3], [3, 0],
@@ -77,70 +72,10 @@ LINE_INDICES = [
     [0, 4], [1, 5], [2, 6], [3, 7],
 ]
 
+def main():
 
-
-def encode_location(decoded_locations):
-    # Sync into the Same Device 
-    current_device = decoded_locations.device
-
-    location_range=[
-        [-50.0, 1.55 - 1.75 / 2.0 - 5.0, 000.0],
-        [+50.0, 1.55 - 1.75 / 2.0 + 5.0, 100.0]]
-
-    location_range = torch.as_tensor(location_range).to(current_device)
-    low, high = location_range
-    low = low.clone().detach().to(decoded_locations.device)
-    high = high.clone().detach().to(decoded_locations.device)
-    
-    decoded_locations = torch.clamp(decoded_locations, min=low, max=high)
-    
-    encoded_locations = torch.logit((decoded_locations - low) / (high - low).clamp(min=1e-6))
-    
-    # 使用 torch.where 将 -inf 替换为 -4
-    encoded_locations = torch.where(torch.isneginf(encoded_locations), torch.tensor(-4.0).to(encoded_locations.device), encoded_locations)
-    return encoded_locations
-
-
-def encode_orientation(rotation_matrices):
-    # 提取 rotation_matrices 中的 cos 和 sin 值
-    cos = rotation_matrices[..., 0, 0]
-    sin = rotation_matrices[..., 0, 2]
-    encoded_orientations = torch.stack([cos, sin], dim=-1)
-    return nn.functional.normalize(encoded_orientations, dim=-1)
-
-
-
-def main(args=None):
-    
-    from trainer.configs import load_config
-    my_conf_train = load_config(args.config_path)
-
-    
-    
-    
-    # DDP Settings
-    # configuration
-    if my_conf_train.TRAIN.DDP.LAUNCHER == "slurm":
-        # NOTE: we must specify `MASTER_ADDR` and `MASTER_PORT` by the environment variables
-        vsrd_plus_plus.distributed.init_process_group(backend=my_conf_train.TRAIN.DDP.BACKEND, port=my_conf_train.TRAIN.DDP.PORT)
-    if my_conf_train.TRAIN.DDP.LAUNCHER == "torchrun":
-        torch.distributed.init_process_group(backend=my_conf_train.TRAIN.DDP.BACKEND)
-    device_id = vsrd_plus_plus.distributed.get_device_id(my_conf_train.TRAIN.DDP.NUM_DEVICES_PER_PROCESS, args.device_id)
-
-    for rank in range(torch.distributed.get_world_size()):
-        with vsrd_plus_plus.distributed.barrier():
-            if torch.distributed.get_rank() == rank:
-                world_size = torch.distributed.get_world_size()
-                print(f"Rank: [{rank}/{world_size}] Device ID: {device_id}")
-    
-    
-    # ================================================================
-    # multiprocessing
-    multiprocessing.set_start_method(my_conf_train.TRAIN.MULTIPROCESSING.START_METHOD, force=True)
-
-    
     # reproducibility
-    seed = my_conf_train.TRAIN.SEED
+    seed = conf_train.TRAIN.SEED
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -149,33 +84,32 @@ def main(args=None):
     
     
     # get the dataset names
-    train_filename_list = my_conf_train.TRAIN.DATASET.FILENAMES
-    dataset_root = my_conf_train.TRAIN.DATASET.ROOT
-    class_names = my_conf_train.TRAIN.DATASET.CLASS_NAMES
-    num_of_workers = my_conf_train.TRAIN.DATASET.NUMS_OF_WORKERS
-    num_source_frames = my_conf_train.TRAIN.DATASET.NUM_SOURCE_FRAMES # 16 by default
+    train_filename_list = conf_train.TRAIN.DATASET.FILENAMES
+    class_names = conf_train.TRAIN.DATASET.CLASS_NAMES
+    num_of_workers = conf_train.TRAIN.DATASET.NUMS_OF_WORKERS
+    num_source_frames = conf_train.TRAIN.DATASET.NUM_SOURCE_FRAMES # 16 by default
 
     # Dataset Preprocessing
-    target_transforms_resize_size = my_conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.IMAGE_SIZE 
-    target_transforms_min_mask_area1 = my_conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.MIN_MASK_AREA_01
-    target_transforms_min_mask_area2 = my_conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.MIN_MASK_AREA_02
-    target_transforms_min_box_size = my_conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.MIN_BOX_SIZE
+    target_transforms_resize_size = conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.IMAGE_SIZE 
+    target_transforms_min_mask_area1 = conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.MIN_MASK_AREA_01
+    target_transforms_min_mask_area2 = conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.MIN_MASK_AREA_02
+    target_transforms_min_box_size = conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.MIN_BOX_SIZE
     
-    source_transforms_resize_size = my_conf_train.TRAIN.DATASET.SOURCE_TRANSFORMS.IMAGE_SIZE 
-    source_transforms_min_mask_area1 = my_conf_train.TRAIN.DATASET.SOURCE_TRANSFORMS.MIN_MASK_AREA_01
-    source_transforms_min_mask_area2 = my_conf_train.TRAIN.DATASET.SOURCE_TRANSFORMS.MIN_MASK_AREA_02
-    source_transforms_min_box_size = my_conf_train.TRAIN.DATASET.SOURCE_TRANSFORMS.MIN_BOX_SIZE
+    source_transforms_resize_size = conf_train.TRAIN.DATASET.SOURCE_TRANSFORMS.IMAGE_SIZE 
+    source_transforms_min_mask_area1 = conf_train.TRAIN.DATASET.SOURCE_TRANSFORMS.MIN_MASK_AREA_01
+    source_transforms_min_mask_area2 = conf_train.TRAIN.DATASET.SOURCE_TRANSFORMS.MIN_MASK_AREA_02
+    source_transforms_min_box_size = conf_train.TRAIN.DATASET.SOURCE_TRANSFORMS.MIN_BOX_SIZE
     
-    dataset_rectification = my_conf_train.TRAIN.DATASET.RECTIFICATION
-    train_batch_size = my_conf_train.TRAIN.DATASET.BATCH_SIZE # 1 by default
+    dataset_rectification = conf_train.TRAIN.DATASET.RECTIFICATION
+    train_batch_size = conf_train.TRAIN.DATASET.BATCH_SIZE # 1 by default
 
 
-    loss_weight_list = {"eikonal_loss":my_conf_train.TRAIN.LOSS_WEIGHT.EIKONAL_LOSS,
-                        "iou_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.IOU_PROJECTION_LOSS,
-                        "l1_projection_loss":my_conf_train.TRAIN.LOSS_WEIGHT.L1_PROJECTION_LOSS,
-                        "photometric_loss":my_conf_train.TRAIN.LOSS_WEIGHT.PHOTOMETRIC_LOSS,
-                        "radiance_loss":my_conf_train.TRAIN.LOSS_WEIGHT.RADIANCE_LOSS,
-                        "silhouette_loss":my_conf_train.TRAIN.LOSS_WEIGHT.SILHOUETTE_LOSS}
+    loss_weight_list = {"eikonal_loss":conf_train.TRAIN.LOSS_WEIGHT.EIKONAL_LOSS,
+                        "iou_projection_loss":conf_train.TRAIN.LOSS_WEIGHT.IOU_PROJECTION_LOSS,
+                        "l1_projection_loss":conf_train.TRAIN.LOSS_WEIGHT.L1_PROJECTION_LOSS,
+                        "photometric_loss":conf_train.TRAIN.LOSS_WEIGHT.PHOTOMETRIC_LOSS,
+                        "radiance_loss":conf_train.TRAIN.LOSS_WEIGHT.RADIANCE_LOSS,
+                        "silhouette_loss":conf_train.TRAIN.LOSS_WEIGHT.SILHOUETTE_LOSS}
 
 
     param_group_names = [
@@ -211,34 +145,35 @@ def main(args=None):
                               num_source_frames=num_source_frames,
                               target_transforms=target_transforms,
                               source_transforms=source_transforms,
-                              rectification=dataset_rectification,
-                              dataset_root=dataset_root)
+                              rectification=dataset_rectification)
 
     # ====================================================================================================
     # loaders
-    loaders = DistributedDataLoader(datasets, batch_size=train_batch_size, collate_fn=collate_nested_dicts,
-                                    drop_last=True,
-                                    pin_memory=False
-                                    )
+    loaders = DataLoader(datasets, batch_size=train_batch_size, collate_fn=collate_nested_dicts)
     # ====================================================================================================
     # utilities
     meters = Dict({
-        "train": ProgressMeter(len(loaders) * my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS)
+        "train": ProgressMeter(len(loaders) * conf_train.TRAIN.OPTIMIZATION_NUM_STEPS)
     })
     stop_watch = StopWatch()
 
     # Using Dynamic Masks Or Not
-    USE_DYNAMIC_MODELING_FLAG = my_conf_train.TRAIN.USE_DYNAMIC_MODELING
-    USE_DYNAMIC_MASK_FLAG = my_conf_train.TRAIN.USE_DYNAMIC_MASK
-    DYNAMIC_TYPE = my_conf_train.TRAIN.DYNAMIC_MODELING_TYPE
-    USE_RDF_MODELING_FLAG = my_conf_train.TRAIN.USE_RDF_MODELING
+    USE_DYNAMIC_MODELING_FLAG = conf_train.TRAIN.USE_DYNAMIC_MODELING
+    
+    USE_DYNAMIC_MASK_FLAG = conf_train.TRAIN.USE_DYNAMIC_MASK
+    DYNAMIC_TYPE = conf_train.TRAIN.DYNAMIC_MODELING_TYPE
+    USE_RDF_MODELING_FLAG = conf_train.TRAIN.USE_RDF_MODELING
 
     
     def train():
         stop_watch.start()
 
-        for multi_inputs in vsrd_plus_plus.distributed.tqdm(loaders):
+        for multi_inputs in tqdm(loaders):
             
+            # just for convenience: change all the keys from single to double format
+            # keys: dict_keys([0, 1, 3, 5, 7, 9, 11, 13, 15, 17, -14, -12, -10, -8, -6, -4, -2])
+            # in each key: dict_keys(['boxes_2d', 'rectification_matrices', 'hard_masks', 'filenames', 'images', 'labels', 
+            #                           'instance_ids', 'extrinsic_matrices', 'soft_masks', 'boxes_3d', 'intrinsic_matrices', 'masks'])
             multi_inputs = {
                 relative_index: Dict.apply({
                     key if re.fullmatch(r".*_\dd", key) else inflection.pluralize(key): value
@@ -246,8 +181,10 @@ def main(args=None):
                 })
                 for relative_index, inputs in multi_inputs.items()}
             
-            multi_inputs = utils.to(multi_inputs, device=device_id, non_blocking=True)
+            multi_inputs = utils.to(multi_inputs, device=0, non_blocking=True)
             target_inputs = multi_inputs[0] # target inputs
+
+
             # ================================================================
             # logging
             image_filename, = target_inputs.filenames    #/media/zliu/data12/dataset/KITTI/VSRD_Format/data_2d_raw/2013_05_28_drive_0000_sync/image_00/data_rect/0000000793.png
@@ -257,17 +194,12 @@ def main(args=None):
             
 
             # Output Locations
-            ckpt_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "ckpts/{}".format(my_conf_train.TRAIN.MODEL_TYPE)),image_dirname)
-            log_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "logs"),image_dirname)
-            out_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "outs"),image_dirname)
-            if os.path.exists(os.path.join(ckpt_dirname, f"step_{my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS - 1}.pt")):
+            ckpt_dirname = os.path.join(conf_train.TRAIN.CONFIG.replace("configs", "ckpts/{}".format(conf_train.TRAIN.MODEL_TYPE)),image_dirname)
+            log_dirname = os.path.join(conf_train.TRAIN.CONFIG.replace("configs", "logs"),image_dirname)
+            out_dirname = os.path.join(conf_train.TRAIN.CONFIG.replace("configs", "outs"),image_dirname)
+            if os.path.exists(os.path.join(ckpt_dirname, f"step_{conf_train.TRAIN.OPTIMIZATION_NUM_STEPS - 1}.pt")):
                 logger.warning(f"[{image_filename}] Already optimized. Skip this sample.")
                 continue
-            
-            print("current ckpt dirname: ", ckpt_dirname)
-            print("current log dirname: ", log_dirname)
-            print("current out dirname: ", out_dirname)
-
 
             os.makedirs(log_dirname, exist_ok=True)
             log_filename = os.path.join(log_dirname, "log.txt")
@@ -279,7 +211,6 @@ def main(args=None):
 
             # NOTE: store the main script and config for reproducibility
             shutil.copy(__file__, os.path.join(log_dirname, os.path.basename(__file__)))
-            
 
             # check the number of instances
             num_instances, = map(len, target_inputs.hard_masks)
@@ -295,6 +226,7 @@ def main(args=None):
             logger.info(f"========== Multi-View Auto-Labeling Start ===================================")    
             logger.info("Datasets length: {}".format(len(datasets)))
             
+
             # ================================================================
             # define models: which is a combination of different modules.
             models = Dict()
@@ -339,25 +271,78 @@ def main(args=None):
                 models['hyper_distance_field'] = hyper_distance_field
                 
             models['positional_encoder'] = positional_encoder
+            
             if USE_DYNAMIC_MODELING_FLAG and  DYNAMIC_TYPE=='mlp':
                 models['detector_residual'] = box_residual_detector  # Using MLP For Learning
-            for model in models.values():
-                model.to(device_id)
-                
-            logger.info(f"Models: {models}")
             
-        
-        
+            for model in models.values():
+                model.to(0)
+
+
+            # ================================================================
+            # optimizer
+            if USE_DYNAMIC_MODELING_FLAG and  DYNAMIC_TYPE=='mlp':
+                optimizer = optim.Adam([
+                    {'params': models.detector.locations, 'lr': 0.01},
+                    {'params': models.detector.dimensions, 'lr': 0.01},
+                    {'params': models.detector.orientations, 'lr': 0.01},
+                    {'params': models.detector.embeddings, 'lr': 0.001},
+                    {'params': models.detector_residual.parameters(),'lr':0.00005},
+                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
+                ], lr=0.01)  
+                
+            elif USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE=='vector_velocity':
+                optimizer = optim.Adam([
+                    {'params': models.detector.locations, 'lr': 0.01},
+                    {'params': models.detector.dimensions, 'lr': 0.01},
+                    {'params': models.detector.orientations, 'lr': 0.01},
+                    {'params': models.detector.embeddings, 'lr': 0.001},
+                    {'params': models.detector.velocity,'lr':0.005},
+                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
+                ], lr=0.01)
+                
+
+            
+            elif USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE=="scalar_velocity":
+                optimizer = optim.Adam([
+                    {'params': models.detector.locations, 'lr': 0.01},
+                    {'params': models.detector.dimensions, 'lr': 0.01},
+                    {'params': models.detector.orientations, 'lr': 0.01},
+                    {'params': models.detector.embeddings, 'lr': 0.001},
+                    {'params': models.detector.scalar_velocity,'lr':0.005},
+                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
+                ], lr=0.01) 
+            
+            else:
+                optimizer = optim.Adam([
+                    {'params': models.detector.locations, 'lr': 0.01},
+                    {'params': models.detector.dimensions, 'lr': 0.01},
+                    {'params': models.detector.orientations, 'lr': 0.01},
+                    {'params': models.detector.embeddings, 'lr': 0.001},
+                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
+                ], lr=0.01) 
+
+
+            # ================================================================
+            # LR scheduler
+            gamma = 0.01 ** (1.0 / 3000.0)
+            scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
+            # ================================================================
+            # summary writer
+            writer = torch.utils.tensorboard.SummaryWriter(log_dirname)
+            # ================================================================
+            # checkpoint saver
+            saver = utils.Saver(ckpt_dirname)
+            # ================================================================
+
+
             '''Data Alignment with Target Views'''
             for source_inputs in multi_inputs.values():
+                
                 source_instance_indices = [] 
 
                 for source_instance_ids, target_instance_ids in zip(source_inputs.instance_ids, target_inputs.instance_ids):
                     
-                    #logger.info(source_instance_ids)
-                    #logger.info(target_instance_ids)
-                    #logger.info("-----------------------")
-
                     indices = [
                         source_instance_ids.tolist().index(target_instance_id.item()) 
                         if target_instance_id in source_instance_ids else -1 
@@ -419,92 +404,8 @@ def main(args=None):
                 )
                 
             dynamic_mask_for_target_view = [False] * num_instances
-            print("Begin Initializations..........")
-            multi_inputs = estimate_initial_attributes(
-                multi_inputs=multi_inputs,
-                device=device_id,
-            )
-            init_attrs = extract_initial_attributes(multi_inputs, device=device_id)
-            if USE_DYNAMIC_MODELING_FLAG and USE_DYNAMIC_MASK_FLAG and init_attrs.is_dynamic is not None:
-                dynamic_mask_for_target_view = init_attrs.is_dynamic
-
-            # initialization
-            with torch.no_grad():
-                if init_attrs.roi_lidar_valid:
-                    loc_for_initial = encode_location(init_attrs.est_location)
-                    orient_for_initial = encode_orientation(init_attrs.est_orientation)
-                    models['detector'].velocity = torch.nn.Parameter(init_attrs.est_velocity)
-                    models['detector'].locations = torch.nn.Parameter(loc_for_initial)
-
-                    # initialization for dynamic objects
-                    for idx, dynamic_mask in enumerate(dynamic_mask_for_target_view):
-                        if dynamic_mask:
-                            if models['detector'].orientations.shape[1] == orient_for_initial.shape[1]:
-                                try:
-                                    models['detector'].orientations[:, idx, :] = torch.nn.Parameter(
-                                        orient_for_initial
-                                    )[:, idx, :]
-                                except Exception:
-                                    pass
-    
-            
-            print("After initailzaition....")
-            # ================================================================
-            # optimizer
-            if USE_DYNAMIC_MODELING_FLAG and  DYNAMIC_TYPE=='mlp':
-                optimizer = optim.Adam([
-                    {'params': models.detector.locations, 'lr': 0.01},
-                    {'params': models.detector.dimensions, 'lr': 0.01},
-                    {'params': models.detector.orientations, 'lr': 0.01},
-                    {'params': models.detector.embeddings, 'lr': 0.001},
-                    {'params': models.detector_residual.parameters(),'lr':0.00005},
-                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
-                ], lr=0.01)  
-                
-            elif USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE=='vector_velocity':
-                optimizer = optim.Adam([
-                    {'params': models.detector.locations, 'lr': 0.01},
-                    {'params': models.detector.dimensions, 'lr': 0.01},
-                    {'params': models.detector.orientations, 'lr': 0.01},
-                    {'params': models.detector.embeddings, 'lr': 0.001},
-                    {'params': models.detector.velocity,'lr':0.005},
-                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
-                ], lr=0.01)
-                
-
-            
-            elif USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE=="scalar_velocity":
-                optimizer = optim.Adam([
-                    {'params': models.detector.locations, 'lr': 0.01},
-                    {'params': models.detector.dimensions, 'lr': 0.01},
-                    {'params': models.detector.orientations, 'lr': 0.01},
-                    {'params': models.detector.embeddings, 'lr': 0.001},
-                    {'params': models.detector.scalar_velocity,'lr':0.005},
-                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
-                ], lr=0.01) 
-            
-            else:
-                optimizer = optim.Adam([
-                    {'params': models.detector.locations, 'lr': 0.01},
-                    {'params': models.detector.dimensions, 'lr': 0.01},
-                    {'params': models.detector.orientations, 'lr': 0.01},
-                    {'params': models.detector.embeddings, 'lr': 0.001},
-                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
-                ], lr=0.01) 
-
-
-            # ================================================================
-            # LR scheduler
-            gamma = 0.01 ** (1.0 / 3000.0)
-            scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
-            # ================================================================
-            # summary writer
-            writer = torch.utils.tensorboard.SummaryWriter(log_dirname)
-            # ================================================================
-            # checkpoint saver
-            saver = utils.Saver(ckpt_dirname)
-            # ================================================================
-            
+            if USE_DYNAMIC_MODELING_FLAG and USE_DYNAMIC_MASK_FLAG:
+                dynamic_mask_for_target_view = infer_dynamic_mask_from_multi_inputs(multi_inputs)
 
 
             # Prepared for Ray Sampling for all the images in the world space, which is also the target frame 0 recified space.
@@ -567,19 +468,21 @@ def main(args=None):
             device = multi_images[0].device
             nums_of_instance_number = multi_hard_masks[0].shape[-1]
             
-            
+
+
+
             # training
             with utils.TrainSwitcher(*models.values()):
-                for step in vsrd_plus_plus.distributed.tqdm(range(my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS), leave=False):
+                for step in tqdm(range(conf_train.TRAIN.OPTIMIZATION_NUM_STEPS)):
                     # ----------------------------------------------------------------
                     # inference here
                     with torch.enable_grad(): 
                         optimizer.zero_grad()     
                         world_outputs = utils.Dict.apply(models.detector()) #['boxes_3d', 'locations', 'dimensions', 'orientations', 'embeddings']               
-
+                
             
                         # Compute the Box Residual: If Using the Dynamic Modeling
-                        if step>=my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
+                        if step>=conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
                             relative_index_list = [relative_index for relative_index in multi_inputs.keys()]
                             if USE_DYNAMIC_MODELING_FLAG:
                                 if DYNAMIC_TYPE=='mlp':
@@ -606,46 +509,33 @@ def main(args=None):
                             else:
                                 # vanallia VSRD
                                 #FIXME Here
-                                relative_box_residual = torch.zeros((1,nums_of_instance_number,nums_of_source_images_integrated_into_rendering,3)).to(device_id)
+                                relative_box_residual = torch.zeros((1,nums_of_instance_number,nums_of_source_images_integrated_into_rendering,3)).to("cuda:0")
 
 
                         # ================================= multi-view projection ======================================================
                         multi_outputs = utils.DefaultDict(utils.Dict)
-                                            
                         # This is the shared base 3D Bounding Boxes
                         world_boxes_3d = nn.functional.pad(world_outputs.boxes_3d, (0, 1), mode="constant", value=1.0) #(1,num_of_instances,8,4)
 
 
+                        
+                        
                         if USE_DYNAMIC_MODELING_FLAG:
                             if USE_DYNAMIC_MASK_FLAG:
                                 # Align the dynamic mask with the current output.                            
                                 dynamic_mask_for_target_view_for_output = get_dynamic_mask_for_the_world_output(target_inputs=target_inputs,
                                                                                                                 world_boxes_3d=world_boxes_3d,
                                                                                                                 dynamic_mask_for_target_view=dynamic_mask_for_target_view)
-
                                 
-                                # using gt for velocaity and the loctaions for visualization
-                                re_order_velo,re_order_loc = get_dynamic_sequentail_for_the_world_output(target_inputs=target_inputs,
-                                                                            world_boxes_3d=world_boxes_3d,
-                                                                            target_location=init_attrs.est_location[0],
-                                                                            target_speed=init_attrs.est_velocity[0])
-                                
-
-                                # Is This a BUG?
-                                
-                                if init_attrs.roi_lidar_valid:
-                                    location_loss = F.l1_loss(re_order_loc,world_outputs.locations.squeeze(0)) # BUG1
-                                    velocity_loss = F.l1_loss(re_order_velo,models['detector'].velocity.squeeze(0))
-                                else:
-                                    location_loss = F.l1_loss(re_order_loc,world_outputs.locations.squeeze(0)) * 0.0 # BUG1
-                                    velocity_loss = F.l1_loss(re_order_velo,models['detector'].velocity.squeeze(0)) * 0.0
-
+    
                                 
                         '''Get all box_3d(at each source view cam coordiante and its projected 2d boxes)'''
                         current_idx = 0
                         for relative_index, inputs in multi_inputs.items():
+                            
+                            
                             # Learn the Box Residual 
-                            if step>=my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
+                            if step>=conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
                                 # Get the current residual.
                                 if USE_DYNAMIC_MODELING_FLAG:
                                     current_location_residual = relative_box_residual[:,:,current_idx,:] #(B,nums_of_instances,3)
@@ -726,6 +616,7 @@ def main(args=None):
                         )) # (tensor([0, 1, 2, 3]), tensor([1, 0, 2, 3]))]  第一个数组表示 target_outputs 的索引。第二个数组表示 target_inputs 的索引。
 
 
+
                         # ----------------------------------------------------------------
                         # projection loss
                         iou_projection_loss = torch.mean(torch.cat([
@@ -756,20 +647,22 @@ def main(args=None):
                         
                         
                         
+
+
                         # ----------------------------------------------------------------
                         # instance loss
                         cosine_annealing = lambda x, a, b: (np.cos(np.pi * x) + 1.0) / 2.0 * (a - b) + b
-                        cosine_ratio = step / my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS
+                        cosine_ratio = step / conf_train.TRAIN.OPTIMIZATION_NUM_STEPS
                         
                         sdf_union_temperature = cosine_annealing(
-                            step / my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS,
-                            my_conf_train.TRAIN.VOLUME_RENDERING.MAX_SDF_UNION_TEMPERATURE,
-                            my_conf_train.TRAIN.VOLUME_RENDERING.MIN_SDF_UNION_TEMPERATURE,
+                            step / conf_train.TRAIN.OPTIMIZATION_NUM_STEPS,
+                            conf_train.TRAIN.VOLUME_RENDERING.MAX_SDF_UNION_TEMPERATURE,
+                            conf_train.TRAIN.VOLUME_RENDERING.MIN_SDF_UNION_TEMPERATURE,
                         )
                         sdf_std_deviation = cosine_annealing(
-                            step / my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS,
-                            my_conf_train.TRAIN.VOLUME_RENDERING.MAX_SDF_STD_DEVIATION,
-                            my_conf_train.TRAIN.VOLUME_RENDERING.MIN_SDF_STD_DEVIATION)
+                            step / conf_train.TRAIN.OPTIMIZATION_NUM_STEPS,
+                            conf_train.TRAIN.VOLUME_RENDERING.MAX_SDF_STD_DEVIATION,
+                            conf_train.TRAIN.VOLUME_RENDERING.MIN_SDF_STD_DEVIATION)
 
 
                         def residual_distance_field(distance_field):
@@ -780,7 +673,7 @@ def main(args=None):
                                 # # 处理 x 维度，将其取绝对值，然后重新组合成位置数据
                                 positions = torch.stack([torch.abs(x_positions), y_positions, z_positions], dim=-1)
                                 # positions = torch.tanh(positions / torch.max(models.detector.dimension_range, dim=0).values)
-                                positions = positions / max(my_conf_train.TRAIN.VOLUME_RENDERING.DISTANCE_RANGE)
+                                positions = positions / max(conf_train.TRAIN.VOLUME_RENDERING.DISTANCE_RANGE)
                                 positions = models.positional_encoder(positions)
                                 distances = distance_field(positions)
                                 ## 在训练过程中，输出的值需要与目标值进行比较（通常通过损失函数）。
@@ -801,7 +694,7 @@ def main(args=None):
                             def wrapper(positions):
                                 distances = distance_field(positions) # get the SDF
                                 # positions = torch.tanh(positions / torch.max(models.detector.dimension_range, dim=0).values)
-                                positions = positions / max(my_conf_train.TRAIN.VOLUME_RENDERING.DISTANCE_RANGE) # SDF Normaliozatozn
+                                positions = positions / max(conf_train.TRAIN.VOLUME_RENDERING.DISTANCE_RANGE) # SDF Normaliozatozn
                                 positions = models.positional_encoder(positions)
 
                                 instance_labels = nn.functional.one_hot(instance_label, num_instances)
@@ -862,7 +755,7 @@ def main(args=None):
                             return wrapper
 
                         # bigger than optimized residual box steps: using RDF
-                        if step >= my_conf_train.TRAIN.OPTIMIZATION_RESIDUAL_BOX_STEPS:
+                        if step >= conf_train.TRAIN.OPTIMIZATION_RESIDUAL_BOX_STEPS:
                             # Compute the Residual Signed Distance.
                             # #(1,4,1617), here the 1617 is the unit numbers.
                             distance_field_weights = models.hyper_distance_field(world_outputs.embeddings)             
@@ -957,7 +850,7 @@ def main(args=None):
                         # only learn the bouding boxes
                         else:
                             # learn the static
-                            if step >= my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
+                            if step >= conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
                                 # using dynamic modeling flag
                                 if USE_DYNAMIC_MODELING_FLAG:
                                     boxes_residuals = relative_box_residual
@@ -1050,7 +943,7 @@ def main(args=None):
                         
                         # Tracking the rays, where the ray from
                         assert stacked_max_values.shape[1] == multi_camera_positions[0].shape[0]
-                        sample_rays_nums_per_instance = divide_into_n_parts(my_conf_train.TRAIN.VOLUME_RENDERING.NUM_RAYS,stacked_max_values.shape[1])
+                        sample_rays_nums_per_instance = divide_into_n_parts(conf_train.TRAIN.VOLUME_RENDERING.NUM_RAYS,stacked_max_values.shape[1])
                         assert stacked_max_values.shape[1] == len(sample_rays_nums_per_instance)
                         multi_ray_indices_list = []
                         for frame_index in range(stacked_max_values.shape[1]):
@@ -1079,8 +972,8 @@ def main(args=None):
                                     distance_field=soft_distance_field[idx],
                                     ray_positions=multi_camera_positions[idx:idx+1,:,:,:].flatten(0, -2)[multi_ray_indices, ...],
                                     ray_directions=multi_ray_directions[idx:idx+1,:,:,:].flatten(0, -2)[multi_ray_indices, ...],
-                                    distance_range=my_conf_train.TRAIN.VOLUME_RENDERING.DISTANCE_RANGE,
-                                    num_samples=my_conf_train.TRAIN.VOLUME_RENDERING.NUM_FINE_SAMPLES,
+                                    distance_range=conf_train.TRAIN.VOLUME_RENDERING.DISTANCE_RANGE,
+                                    num_samples=conf_train.TRAIN.VOLUME_RENDERING.NUM_FINE_SAMPLES,
                                     sdf_std_deviation=sdf_std_deviation,
                                     cosine_ratio=cosine_ratio,
                                 )
@@ -1131,33 +1024,15 @@ def main(args=None):
                         
                         silhouttle_loss_list_before_mean = torch.cat(silhouttle_loss_list_before_mean_list,dim=-2).squeeze(1)
                         silhouette_loss = torch.mean(silhouttle_loss_list_before_mean)
-                    
+                        
 
+                        losses = Dict(
+                            iou_projection_loss=iou_projection_loss,
+                            l1_projection_loss=l1_projection_loss,
+                            silhouette_loss=silhouette_loss,
+                        )
 
-
-                        if USE_DYNAMIC_MODELING_FLAG:
-                            if USE_DYNAMIC_MASK_FLAG:
-                                losses = Dict(
-                                    iou_projection_loss=iou_projection_loss,
-                                    l1_projection_loss=l1_projection_loss,
-                                    silhouette_loss=silhouette_loss,
-                                    location_loss = location_loss,
-                                    velocity_loss = velocity_loss,
-                                    
-                                )
-                                
-                                loss_weight_list['location_loss'] = 1.0
-                                loss_weight_list['velocity_loss'] = 1.0
-                        else:
-                            losses = Dict(
-                                iou_projection_loss=iou_projection_loss,
-                                l1_projection_loss=l1_projection_loss,
-                                silhouette_loss=silhouette_loss,
-                            )
-                            
-                                
-
-                        if step >= my_conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
+                        if step >= conf_train.TRAIN.OPTIMIZATION_WARMUP_STEPS:
                             eikonal_loss = nn.functional.mse_loss(
                                 input=torch.norm(multi_sampled_gradients, dim=-1),
                                 target=multi_sampled_gradients.new_ones(*multi_sampled_gradients.shape[:-1]),
@@ -1179,7 +1054,7 @@ def main(args=None):
                     # ----------------------------------------------------------------
                     # logging
                     with torch.no_grad():
-                        if not (step + 1) % my_conf_train.TRAIN.LOGGING.SCALAR_INTERVALS:
+                        if not (step + 1) % conf_train.TRAIN.LOGGING.SCALAR_INTERVALS:
                             # ----------------------------------------------------------------
                             # evaluation
                             pd_boxes_3d = [
@@ -1196,7 +1071,7 @@ def main(args=None):
                             metrics = {}
 
                             if any([any(map(utils.compose(torch.isfinite, torch.all), gt_boxes_3d)) for gt_boxes_3d in gt_boxes_3d]):
-                                rotation_matrix = rotation_matrix_x(torch.tensor(-np.pi / 2.0, device=device_id))
+                                rotation_matrix = rotation_matrix_x(torch.tensor(-np.pi / 2.0, device=0))
                                 ious_3d, ious_bev = map(torch.as_tensor, zip(*sum([
                                     [
                                         box_3d_iou(
@@ -1244,12 +1119,10 @@ def main(args=None):
                             }
 
                             logger.info(
-                                f"[Training] Rank: {torch.distributed.get_rank()}, Step: {step}, Progress: {meters.train.progress():.2%}, "
                                 f"ETA: {datetime.timedelta(seconds=meters.train.arrival_seconds())}, "
                                 f"scalars: {json.dumps(scalars, indent=4)}"
                             )
                             logger.info(
-                                f"[Training] Rank: {torch.distributed.get_rank()}, Step: {step}, Progress: {meters.train.progress():.2%}, "
                                 f"ETA: {datetime.timedelta(seconds=meters.train.arrival_seconds())}, "
                                 f"runtimes: {json.dumps(dict(zip(meters.train.keys(), meters.train.means())), indent=4)}"
                             )
@@ -1257,8 +1130,7 @@ def main(args=None):
                             for name, metric in scalars.items():
                                 writer.add_scalar(f"scalars/{name}", metric, step)
 
-                        if not (step + 1) % my_conf_train.TRAIN.LOGGING.CKPT_INTERVALS:
-                    
+                        if not (step + 1) % conf_train.TRAIN.LOGGING.CKPT_INTERVALS:
                             saver.save(
                                 filename=f"step_{step}.pt",
                                 step=step,
@@ -1275,34 +1147,16 @@ def main(args=None):
         stop_watch.stop()
                             
                             
+
+    
     train()
         
+        
+    
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="SceneFlow-Multi-Baseline Images")
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default=None,
-        help="Path to pretrained model or model identifier from huggingface.co/models.")
-
-    parser.add_argument(
-        "--device_id",
-        type=int,
-        default=None,
-        required=True,
-        help="Path to pretrained model or model identifier from huggingface.co/models.")
-
-    # get the local rank
-    args = parser.parse_args()
 
 
-    return args
 
 if __name__=="__main__":
-
-    args = parse_args()
-
-
-    main(args=args)
+    main()

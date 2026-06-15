@@ -209,7 +209,7 @@ def convert_disparity_to_depth(
 
 
 def depth_to_uint16(depth_m: np.ndarray) -> np.ndarray:
-    """Encode depth in metres as uint16 (value / 256 = metres), matching ``pseudo_depth_ssl``."""
+    """Encode depth in metres as uint16 (value / 256 = metres)."""
     return (np.asarray(depth_m, dtype=np.float32) * 256).astype(np.uint16)
 
 
@@ -234,7 +234,7 @@ def left_path_to_depth_output(
     left_path: str | os.PathLike,
     output_name: str = DEFAULT_OUTPUT_NAME,
 ) -> str:
-    """Derive ``pseudo_depth_ssl/...`` output path from a ``data_2d_raw/...`` left image."""
+    """Derive pseudo-depth output path from a ``data_2d_raw/...`` left image."""
     return str(left_path).replace("data_2d_raw", output_name)
 
 

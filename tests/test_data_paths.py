@@ -7,7 +7,7 @@ Checks that:
   3. Every FILENAMES txt file exists and is non-empty.
   4. Every path inside a FILENAMES txt resolves to a real image file
      (sampled, not exhaustive – first and last line per file).
-  5. pseudo_depth_ssl coverage for sampled frames.
+  5. pseudo_depth_ssl_waft_stereo coverage for sampled frames.
 
 Run from project root:
     pixi run pytest tests/test_data_paths.py -v
@@ -15,6 +15,7 @@ Run from project root:
 
 import os
 import pytest
+from preprocessing.dataset_paths import pseudo_depth_path_from_image
 from trainer.configs import load_config
 
 # All named configs that should be loadable
@@ -30,6 +31,7 @@ ALL_CONFIGS = [
     "sequence_10",
     "ablation_full",
     "debug",
+    "smoke",
     "inference",
 ]
 
@@ -135,7 +137,7 @@ def test_filenames_image_paths_exist(name):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. pseudo_depth_ssl coverage: every image in FILENAMES must have a depth PNG
+# 5. WAFT pseudo depth coverage: every image in FILENAMES must have a depth PNG
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("name", SEQUENCE_CONFIGS)
@@ -150,7 +152,7 @@ def test_pseudo_depth_exists_for_sampled_frames(name):
             lines = [l.strip() for l in f if l.strip()]
         for line in lines:
             img_path = _parse_filenames_line(line, root)
-            depth_path = img_path.replace("data_2d_raw", "pseudo_depth_ssl")
+            depth_path = pseudo_depth_path_from_image(img_path)
             assert os.path.isfile(depth_path), (
                 f"Depth map missing for sampled frame:\n"
                 f"  image: {img_path}\n"

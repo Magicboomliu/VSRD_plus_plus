@@ -4,7 +4,6 @@
       "FILENAMES": [
         "filenames/R50-N16-M128-B16/2013_05_28_drive_0007_sync/sampled_image_filenames.txt"
       ]
-    },
-    "DYNAMIC_LABELS_PATH": "dynamic_attributes_est/sync07/dynamic_mask.txt"
+    }
   }
 }

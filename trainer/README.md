@@ -14,10 +14,27 @@ Following the Vanila VSRD, we propsoed the VSRD++ consider the dynamic object mo
 
 ## Training 
 
-````
-python train.py
+| Script | Purpose |
+|--------|---------|
+| `train.py` | Standard VSRD++ training (attribute init + online dynamic) |
+| `train_no_init.py` | Ablation: skip attribute initialization |
+| `train_ablation.py` | Mask-erode ablations (`--erode_ratio`) |
+| `train_sharded.py` | 64-way split training (`SPLITS64/split_sub`) |
+| `train_legacy.py` | Deprecated legacy entry point |
 
-````
+Recommended (single GPU):
+
+```bash
+cd trainer
+CUDA_VISIBLE_DEVICES=0 torchrun \
+    --rdzv_backend c10d --rdzv_endpoint localhost:29500 \
+    --nnodes 1 --nproc_per_node 1 \
+    train.py --config_path sequence_07 --device_id 0
+```
+
+Or via pixi from repo root: `pixi run train -- --config_path sequence_07 --device_id 0`
+
+Shell helpers: `trainer/scripts/train.sh`, `train_smoke.sh`, `train_ablation.sh`, `train_sharded.sh`, `train_tsubame.sh`.
 
 ## Inference
 
@@ -32,23 +49,41 @@ python infernece.py
 python evaluation.py
 ```
 
-Change the dynamic modeling here at the `configs` here
+Configs are JSON under `trainer/configs/` (see `base.json` + `sequence_XX.json`).
 
+Example `sequence_07.json` (only `FILENAMES` is required; paths are relative to `DATASET.ROOT`):
+
+```json
+{
+  "TRAIN": {
+    "DATASET": {
+      "FILENAMES": [
+        "filenames/R50-N16-M128-B16/2013_05_28_drive_0007_sync/sampled_image_filenames.txt"
+      ]
+    }
+  }
+}
 ```
-# Modifications Here
-_C.TRAIN.MODEL_TYPE='box_residual_scalar_velocity'
-_C.TRAIN.OPTIMIZATION_NUM_STEPS=4000
-_C.TRAIN.OPTIMIZATION_WARMUP_STEPS=1000
-_C.TRAIN.OPTIMIZATION_RESIDUAL_BOX_STEPS=2000
 
-_C.TRAIN.USE_RDF_MODELING=True
-_C.TRAIN.USE_DYNAMIC_MASK=True
-_C.TRAIN.USE_DYNAMIC_MODELING=True
+`load_config("sequence_07")` auto-sets `DYNAMIC_LABELS_PATH` to `dynamic_attributes_est_gt/2013_05_28_drive_0007_sync/dynamic_mask.txt` (validator / compare scripts only — training infers dynamic/static online).
 
+Smoke test config `smoke.json` uses the same sequence with `OPTIMIZATION_NUM_STEPS: 50`.
 
-# Just for testing
-_C.TRAIN.DYNAMIC_LABELS_PATH="/home/zliu/Desktop/CVPR2025/VSRD-V2/data_pre_processing/Dyanmic_Object_Filtering/saved_contents/sync06/dynamic_mask.txt"
+Key training flags in `base.json`:
 
-# selective from 'mlp', 'vector_velocity','scalar_velocity'
-_C.TRAIN.DYNAMIC_MODELING_TYPE='scalar_velocity'
-``
+```json
+{
+  "TRAIN": {
+    "USE_RDF_MODELING": true,
+    "USE_DYNAMIC_MASK": true,
+    "USE_DYNAMIC_MODELING": true,
+    "DYNAMIC_MODELING_TYPE": "vector_velocity"
+  }
+}
+```
+
+`DYNAMIC_MODELING_TYPE`: `mlp`, `vector_velocity`, or `scalar_velocity`.
+
+Load config: `from trainer.configs import load_config; cfg = load_config("07")`
+
+Path constants: [preprocessing/dataset_paths.py](../preprocessing/dataset_paths.py)

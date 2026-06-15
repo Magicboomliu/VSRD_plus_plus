@@ -7,7 +7,7 @@
         "filenames/R50-N16-M128-B16/dynamic_example/example_0000009463.txt"
       ]
     },
-    "DYNAMIC_LABELS_PATH": "dynamic_attributes_est/sync06/dynamic_mask.txt"
+    "DYNAMIC_LABELS_PATH": "dynamic_attributes_est_gt/2013_05_28_drive_0006_sync/dynamic_mask.txt"
   },
   "EVAL": {
     "MODELS_PATH": ""
