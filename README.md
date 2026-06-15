@@ -387,7 +387,7 @@ Configs are JSON under `trainer/configs/`:
 trainer/configs/
 ├── base.json              # defaults + DATASET.ROOT (edit this first)
 ├── sequence_XX.json       # one sequence per file (FILENAMES only)
-├── smoke.json             # quick smoke test (sequence_00, 50 steps)
+├── smoke.json             # smoke test config (same training settings as base; use a short FILENAMES list)
 ├── ablation_selective.json
 ├── ablation_full.json
 ├── inference.json

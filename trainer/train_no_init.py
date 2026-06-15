@@ -257,9 +257,26 @@ def main(args=None):
             
 
             # Output Locations
-            ckpt_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "ckpts/{}".format(my_conf_train.TRAIN.MODEL_TYPE)),image_dirname)
-            log_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "logs"),image_dirname)
-            out_dirname = os.path.join(my_conf_train.TRAIN.CONFIG.replace("configs", "outs"),image_dirname)
+            if args.ckpt_dirname:
+                base_ckpt_dir = args.ckpt_dirname
+            else:
+                base_ckpt_dir = my_conf_train.TRAIN.CONFIG.replace(
+                    "configs", "ckpts/{}".format(my_conf_train.TRAIN.MODEL_TYPE)
+                )
+
+            if args.log_dirname:
+                base_log_dir = args.log_dirname
+            else:
+                base_log_dir = my_conf_train.TRAIN.CONFIG.replace("configs", "logs")
+
+            if args.out_dirname:
+                base_out_dir = args.out_dirname
+            else:
+                base_out_dir = my_conf_train.TRAIN.CONFIG.replace("configs", "outs")
+
+            ckpt_dirname = os.path.join(base_ckpt_dir, image_dirname)
+            log_dirname = os.path.join(base_log_dir, image_dirname)
+            out_dirname = os.path.join(base_out_dir, image_dirname)
             if os.path.exists(os.path.join(ckpt_dirname, f"step_{my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS - 1}.pt")):
                 logger.warning(f"[{image_filename}] Already optimized. Skip this sample.")
                 continue
@@ -1234,7 +1251,25 @@ def parse_args():
         type=int,
         default=None,
         required=True,
-        help="Path to pretrained model or model identifier from huggingface.co/models.")
+        help="CUDA device index.")
+
+    parser.add_argument(
+        "--ckpt_dirname",
+        type=str,
+        default=None,
+        help="Custom checkpoint root (default: trainer/ckpts/{MODEL_TYPE}).")
+
+    parser.add_argument(
+        "--log_dirname",
+        type=str,
+        default=None,
+        help="Custom log root (default: trainer/logs).")
+
+    parser.add_argument(
+        "--out_dirname",
+        type=str,
+        default=None,
+        help="Custom output root (default: trainer/outs).")
 
     # get the local rank
     args = parser.parse_args()

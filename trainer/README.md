@@ -67,7 +67,7 @@ Example `sequence_07.json` (only `FILENAMES` is required; paths are relative to 
 
 `load_config("sequence_07")` auto-sets `DYNAMIC_LABELS_PATH` to `dynamic_attributes_est_gt/2013_05_28_drive_0007_sync/dynamic_mask.txt` (validator / compare scripts only — training infers dynamic/static online).
 
-Smoke test config `smoke.json` uses the same sequence with `OPTIMIZATION_NUM_STEPS: 50`.
+Smoke test uses `smoke.json`: training hyperparameters come from `base.json` (same as formal runs). To keep it fast, point `FILENAMES` at a short frame list (e.g. copy the first few lines of `sampled_image_filenames.txt` into a separate `.txt`).
 
 Key training flags in `base.json`:
 

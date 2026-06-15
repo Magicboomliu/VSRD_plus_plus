@@ -18,13 +18,15 @@ def test_sequence_config_auto_dynamic_labels_path():
     assert cfg.TRAIN.DYNAMIC_LABELS_PATH == expected
 
 
-def test_smoke_config_has_short_optimization():
-    cfg = load_config("smoke")
-    assert cfg.TRAIN.OPTIMIZATION_NUM_STEPS == 50
+def test_smoke_config_matches_formal_training_defaults():
+    smoke = load_config("smoke")
+    seq00 = load_config("sequence_00")
+    assert smoke.TRAIN.OPTIMIZATION_NUM_STEPS == seq00.TRAIN.OPTIMIZATION_NUM_STEPS
+    assert smoke.TRAIN.LOGGING.CKPT_INTERVALS == seq00.TRAIN.LOGGING.CKPT_INTERVALS
 
 
 def test_debug_alias_loads_smoke():
-    assert load_config("debug").TRAIN.OPTIMIZATION_NUM_STEPS == 50
+    assert load_config("debug").TRAIN.OPTIMIZATION_NUM_STEPS == load_config("smoke").TRAIN.OPTIMIZATION_NUM_STEPS
 
 
 def test_ablation_full_keeps_custom_dynamic_path():
