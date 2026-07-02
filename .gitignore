@@ -43,6 +43,10 @@ preprocessing/optical_flow_estimation/**/ckpts/
 /trainer/debugs/
 /trainer/evaluation_results/
 /trainer/results_visualizations/
+/trainer/wandb/
+
+# Some tools may write wandb runs at repo root
+/wandb/
 
 # ── Data ────────────────────────────────────────────────────────────────────
 /datasets/
