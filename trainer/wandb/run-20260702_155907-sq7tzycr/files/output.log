@@ -1,0 +1,38 @@
+  0%|                                                                           | 0/908 [01:03<?, ?it/s]
+current ckpt dirname:  /data1/zliu/vsrdpp/ckpts/data_2d_raw/2013_05_28_drive_0010_sync/image_00/data_rect/0000002853
+current log dirname:  /data1/zliu/vsrdpp/logs/data_2d_raw/2013_05_28_drive_0010_sync/image_00/data_rect/0000002853
+current out dirname:  /data1/zliu/vsrdpp/outs/data_2d_raw/2013_05_28_drive_0010_sync/image_00/data_rect/0000002853
+Traceback (most recent call last):
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 1430, in <module>
+    main(args=args)
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 1370, in main
+    train()
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 297, in train
+    os.makedirs(log_dirname, exist_ok=True)
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/os.py", line 215, in makedirs
+    makedirs(head, exist_ok=exist_ok)
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/os.py", line 215, in makedirs
+    makedirs(head, exist_ok=exist_ok)
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/os.py", line 215, in makedirs
+    makedirs(head, exist_ok=exist_ok)
+  [Previous line repeated 5 more times]
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/os.py", line 225, in makedirs
+    mkdir(name, mode)
+PermissionError: [Errno 13] Permission denied: '/data1'
+Traceback (most recent call last):
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 1430, in <module>
+    main(args=args)
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 1370, in main
+    train()
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 297, in train
+    os.makedirs(log_dirname, exist_ok=True)
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/os.py", line 215, in makedirs
+    makedirs(head, exist_ok=exist_ok)
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/os.py", line 215, in makedirs
+    makedirs(head, exist_ok=exist_ok)
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/os.py", line 215, in makedirs
+    makedirs(head, exist_ok=exist_ok)
+  [Previous line repeated 5 more times]
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/os.py", line 225, in makedirs
+    mkdir(name, mode)
+PermissionError: [Errno 13] Permission denied: '/data1'

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Tsubame cluster job script for train.py
 #$ -cwd
 #$ -l gpu_1=1
@@ -8,21 +8,33 @@
 #$ -m ae
 #$ -M liuzihua1004@gmail.com
 
-module load cuda/12.0.0 cudnn/9.0.0 ffmpeg/6.1.1
-module load nccl/2.20.5
-module load intel-mpi/2021.11 openmpi/5.0.2-gcc
-module load forge/23.1.2 intel-vtune/2024.0
-module load miniconda/24.1.2 & eval "$(/apps/t4/rhel9/free/miniconda/24.1.2/bin/conda shell.bash hook)"
+# Cluster job script (TSUBAME). Uses `pixi run torchrun` from repo root.
 
-conda activate vsrd_plus_plus
+set -euo pipefail
 
-nvidia-smi
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TRAINER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${TRAINER_DIR}/.." && pwd)"
 
-cd ..
-torchrun \
-  --rdzv_backend c10d \
-  --rdzv_endpoint localhost:29500 \
-  --nnodes 1 \
-  --nproc_per_node 1 \
-  train.py --config_path sequence_00 \
-  --device_id 0
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+load_dotenv
+
+run_tsubame() {
+  CONFIG_PATH="${CONFIG_PATH:-sequence_00}"
+  DEVICE_ID="${DEVICE_ID:-0}"
+  CUDA_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+
+  TRAIN_SCRIPT="train.py"
+  RDZV_ENDPOINT="${RDZV_ENDPOINT:-localhost:29500}"
+  NPROC_PER_NODE=1
+  PIXI_WRAP=1
+
+  module load cuda/12.0.0 cudnn/9.0.0 ffmpeg/6.1.1
+  module load nccl/2.20.5
+
+  nvidia-smi
+  run_train_job
+}
+
+run_tsubame "$@"

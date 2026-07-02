@@ -56,6 +56,7 @@ from vsrd_plus_plus import visualization
 from trainer.utils.box_geo import decode_box_3d,divide_into_n_parts,get_dynamic_mask_for_the_world_output,get_dynamic_sequentail_for_the_world_output
 from trainer.utils.file_io import read_text_lines,read_complex_strings
 from preprocessing.Initial_Attributes import estimate_initial_attributes, extract_initial_attributes
+from trainer.utils.wandb_utils import maybe_init_wandb, wandb_log_scalars
 
 import re
 import vsrd_plus_plus
@@ -201,6 +202,8 @@ def main(args=None):
     
     from trainer.configs import load_config
     my_conf_train = load_config(args.config_path)
+    wandb = None
+    wandb_run = None
 
     
     
@@ -219,6 +222,9 @@ def main(args=None):
             if torch.distributed.get_rank() == rank:
                 world_size = torch.distributed.get_world_size()
                 print(f"Rank: [{rank}/{world_size}] Device ID: {device_id}")
+
+    # Optional Weights & Biases logging (rank 0 only; init after process group)
+    wandb, wandb_run = maybe_init_wandb(cfg=my_conf_train, args=args, rank=torch.distributed.get_rank())
     
     
     # ================================================================
@@ -345,6 +351,7 @@ def main(args=None):
     
     def train():
         stop_watch.start()
+        sample_index = 0
 
         for multi_inputs in vsrd_plus_plus.distributed.tqdm(loaders):
             
@@ -1383,6 +1390,19 @@ def main(args=None):
                             for name, metric in scalars.items():
                                 writer.add_scalar(f"scalars/{name}", metric, step)
 
+                            if wandb is not None and wandb_run is not None:
+                                global_step = sample_index * my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS + step
+                                wandb_log_scalars(
+                                    wandb,
+                                    wandb_run,
+                                    scalars,
+                                    step=global_step,
+                                    image_dirname=image_dirname,
+                                    local_step=step,
+                                    sample_index=sample_index,
+                                    erode_ratio=args.erode_ratio,
+                                )
+
                         if not (step + 1) % my_conf_train.TRAIN.LOGGING.CKPT_INTERVALS:
                     
                             saver.save(
@@ -1397,6 +1417,8 @@ def main(args=None):
                                 metrics=metrics,
                             )
                         meters.train.update(logging=stop_watch.restart())
+
+            sample_index += 1
 
         stop_watch.stop()
                             
@@ -1443,6 +1465,18 @@ def parse_args():
         type=float,
         default=0.0,
         help="Mask erode ratio (0.0-1.0). 0.0 means no erode, 0.05 means 5%% erode. Default: 0.0 (disabled).")
+
+    # --- Weights & Biases (optional) ---
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging (rank 0 only).")
+    parser.add_argument("--wandb_project", type=str, default="VSRD-plus-plus", help="wandb project name.")
+    parser.add_argument("--wandb_entity", type=str, default="liuzihua1004", help="wandb entity/team (optional).")
+    parser.add_argument("--wandb_name", type=str, default="", help="wandb run name (optional).")
+    parser.add_argument("--wandb_tags", type=str, default="", help="Comma-separated wandb tags (optional).")
+    parser.add_argument(
+        "--wandb_log_images",
+        action="store_true",
+        help="(Reserved) Log images to wandb (not used in train_ablation.py).",
+    )
 
     # get the local rank
     args = parser.parse_args()

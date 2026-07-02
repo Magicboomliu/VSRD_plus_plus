@@ -53,6 +53,7 @@ from vsrd_plus_plus import visualization
 
 from trainer.utils.box_geo import decode_box_3d,divide_into_n_parts,get_dynamic_mask_for_the_world_output,get_dynamic_sequentail_for_the_world_output
 from preprocessing.Initial_Attributes import infer_dynamic_mask_from_multi_inputs
+from trainer.utils.wandb_utils import maybe_init_wandb, wandb_log_scalars
 import re
 
 import vsrd_plus_plus
@@ -113,6 +114,8 @@ def main(args=None):
     
     from trainer.configs import load_config
     my_conf_train = load_config(args.config_path)
+    wandb = None
+    wandb_run = None
     
     
     
@@ -131,6 +134,13 @@ def main(args=None):
             if torch.distributed.get_rank() == rank:
                 world_size = torch.distributed.get_world_size()
                 print(f"Rank: [{rank}/{world_size}] Device ID: {device_id}")
+
+    def _log_rank0(msg: str) -> None:
+        if torch.distributed.get_rank() == 0:
+            print(msg, flush=True)
+
+    # Optional Weights & Biases logging (rank 0 only; init after process group)
+    wandb, wandb_run = maybe_init_wandb(cfg=my_conf_train, args=args, rank=torch.distributed.get_rank())
     
     
     # ================================================================
@@ -153,6 +163,11 @@ def main(args=None):
     class_names = my_conf_train.TRAIN.DATASET.CLASS_NAMES
     num_of_workers = my_conf_train.TRAIN.DATASET.NUMS_OF_WORKERS
     num_source_frames = my_conf_train.TRAIN.DATASET.NUM_SOURCE_FRAMES # 16 by default
+
+    _log_rank0(f"[data] config_path={args.config_path}")
+    _log_rank0(f"[data] dataset_root={dataset_root}")
+    _log_rank0(f"[data] filenames_files={len(train_filename_list)} (txt/json entries)")
+    _log_rank0(f"[data] batch_size={my_conf_train.TRAIN.DATASET.BATCH_SIZE} num_source_frames={num_source_frames} num_workers={num_of_workers}")
 
     # Dataset Preprocessing
     target_transforms_resize_size = my_conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.IMAGE_SIZE 
@@ -212,6 +227,7 @@ def main(args=None):
                               source_transforms=source_transforms,
                               rectification=dataset_rectification,
                               dataset_root=dataset_root)
+    _log_rank0(f"[data] dataset_len={len(datasets)}")
 
     # ====================================================================================================
     # loaders
@@ -219,6 +235,7 @@ def main(args=None):
                                     drop_last=True,
                                     pin_memory=False
                                     )
+    _log_rank0(f"[data] loader_len={len(loaders)} (batches)")
     # ====================================================================================================
     # utilities
     meters = Dict({
@@ -236,8 +253,15 @@ def main(args=None):
     
     def train():
         stop_watch.start()
+        sample_index = 0
 
         for multi_inputs in vsrd_plus_plus.distributed.tqdm(loaders):
+            if sample_index == 0 and torch.distributed.get_rank() == 0:
+                try:
+                    one = next(iter(multi_inputs.values()))
+                    _log_rank0(f"[data] first_batch_loaded (keys={list(one.keys())[:6]}...)")
+                except Exception:
+                    _log_rank0("[data] first_batch_loaded")
             
             multi_inputs = {
                 relative_index: Dict.apply({
@@ -1217,6 +1241,18 @@ def main(args=None):
                             for name, metric in scalars.items():
                                 writer.add_scalar(f"scalars/{name}", metric, step)
 
+                            if wandb is not None and wandb_run is not None:
+                                global_step = sample_index * my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS + step
+                                wandb_log_scalars(
+                                    wandb,
+                                    wandb_run,
+                                    scalars,
+                                    step=global_step,
+                                    image_dirname=image_dirname,
+                                    local_step=step,
+                                    sample_index=sample_index,
+                                )
+
                         if not (step + 1) % my_conf_train.TRAIN.LOGGING.CKPT_INTERVALS:
                             saver.save(
                                 filename=f"step_{step}.pt",
@@ -1230,6 +1266,8 @@ def main(args=None):
                                 metrics=metrics,
                             )
                         meters.train.update(logging=stop_watch.restart())
+
+            sample_index += 1
 
         stop_watch.stop()
                             
@@ -1270,6 +1308,18 @@ def parse_args():
         type=str,
         default=None,
         help="Custom output root (default: trainer/outs).")
+
+    # --- Weights & Biases (optional) ---
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging (rank 0 only).")
+    parser.add_argument("--wandb_project", type=str, default="VSRD-plus-plus", help="wandb project name.")
+    parser.add_argument("--wandb_entity", type=str, default="liuzihua1004", help="wandb entity/team (optional).")
+    parser.add_argument("--wandb_name", type=str, default="", help="wandb run name (optional).")
+    parser.add_argument("--wandb_tags", type=str, default="", help="Comma-separated wandb tags (optional).")
+    parser.add_argument(
+        "--wandb_log_images",
+        action="store_true",
+        help="(Reserved) Log images to wandb (not used in train_no_init.py).",
+    )
 
     # get the local rank
     args = parser.parse_args()

@@ -49,6 +49,8 @@ kitti360scripts = "==1.0.0"
 yacs = ">=0.1"  # required by third-party preprocessing tools (segmentation)
 rich = ">=13.7"
 open3d = "*"
+wandb = ">=0.16"
+python-dotenv = ">=1.0"
 # nerfacc is lazily imported only in the NerfAcc rendering path.
 # It requires a special pre-built wheel. Install manually after `pixi install`:
 #   pip install nerfacc==0.5.3+pt113cu116 \

@@ -1,23 +1,30 @@
 #!/usr/bin/env bash
-# Mask-erode ablation launcher (train_ablation.py)
+# Mask-erode ablation (train_ablation.py).
 
-CONFIG_PATH="${CONFIG_PATH:-ablation_selective}"
-DEVICE_ID="${DEVICE_ID:-0}"
-ERODE_RATIO="${ERODE_RATIO:-0.03}"
-CKPT_DIRNAME="${CKPT_DIRNAME:-}"
-LOG_DIRNAME="${LOG_DIRNAME:-}"
-OUT_DIRNAME="${OUT_DIRNAME:-}"
+set -euo pipefail
 
-cd ..
-CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}" torchrun \
-  --rdzv_backend c10d \
-  --rdzv_endpoint localhost:22500 \
-  --nnodes 1 \
-  --nproc_per_node 1 \
-  train_ablation.py \
-  --config_path "$CONFIG_PATH" \
-  --device_id "$DEVICE_ID" \
-  --erode_ratio "$ERODE_RATIO" \
-  ${CKPT_DIRNAME:+--ckpt_dirname "$CKPT_DIRNAME"} \
-  ${LOG_DIRNAME:+--log_dirname "$LOG_DIRNAME"} \
-  ${OUT_DIRNAME:+--out_dirname "$OUT_DIRNAME"}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TRAINER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${TRAINER_DIR}/.." && pwd)"
+
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+ensure_pixi "trainer/scripts/train_ablation.sh" "$@"
+load_dotenv
+
+run_ablation() {
+  CONFIG_PATH="${CONFIG_PATH:-ablation_selective}"
+  DEVICE_ID="${DEVICE_ID:-0}"
+  ERODE_RATIO="${ERODE_RATIO:-0.03}"
+  CUDA_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+  CKPT_DIRNAME="${CKPT_DIRNAME:-}"
+  LOG_DIRNAME="${LOG_DIRNAME:-}"
+  OUT_DIRNAME="${OUT_DIRNAME:-}"
+
+  TRAIN_SCRIPT="train_ablation.py"
+  RDZV_ENDPOINT="${RDZV_ENDPOINT:-localhost:22500}"
+  NPROC_PER_NODE=1
+  run_train_job
+}
+
+run_ablation "$@"

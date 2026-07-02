@@ -1,21 +1,29 @@
 #!/usr/bin/env bash
-# Single-GPU smoke test for train.py (smoke.json — same hyperparams as formal training)
+# Single-GPU smoke test (smoke.json, same hyperparams as formal training).
 
-CONFIG_PATH="${CONFIG_PATH:-smoke}"
-DEVICE_ID="${DEVICE_ID:-0}"
-CUDA_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-CKPT_DIRNAME="${CKPT_DIRNAME:-}"
-LOG_DIRNAME="${LOG_DIRNAME:-}"
-OUT_DIRNAME="${OUT_DIRNAME:-}"
+set -euo pipefail
 
-cd "$(dirname "$0")/.."
-CUDA_VISIBLE_DEVICES="$CUDA_DEVICES" torchrun \
-  --rdzv_backend c10d \
-  --rdzv_endpoint localhost:29500 \
-  --nnodes 1 \
-  --nproc_per_node 1 \
-  train.py --config_path "$CONFIG_PATH" \
-  --device_id "$DEVICE_ID" \
-  ${CKPT_DIRNAME:+--ckpt_dirname "$CKPT_DIRNAME"} \
-  ${LOG_DIRNAME:+--log_dirname "$LOG_DIRNAME"} \
-  ${OUT_DIRNAME:+--out_dirname "$OUT_DIRNAME"}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TRAINER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${TRAINER_DIR}/.." && pwd)"
+
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+ensure_pixi "trainer/scripts/train_smoke.sh" "$@"
+load_dotenv
+
+run_smoke() {
+  CONFIG_PATH="${CONFIG_PATH:-smoke}"
+  DEVICE_ID="${DEVICE_ID:-0}"
+  CUDA_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+  CKPT_DIRNAME="${CKPT_DIRNAME:-}"
+  LOG_DIRNAME="${LOG_DIRNAME:-}"
+  OUT_DIRNAME="${OUT_DIRNAME:-}"
+
+  TRAIN_SCRIPT="train.py"
+  RDZV_ENDPOINT="${RDZV_ENDPOINT:-localhost:29500}"
+  NPROC_PER_NODE=1
+  run_train_job
+}
+
+run_smoke "$@"

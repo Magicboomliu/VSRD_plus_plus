@@ -268,17 +268,37 @@ VSRD++ follows a **two-stage pipeline**:
 
 ## 🚀 Quick Start
 
+> **Use the pixi environment** (`pixi install` from repo root). Do not run training in `(base)` conda — PyTorch/torchvision may be mismatched.
+
+### Prerequisites (before training)
+
+1. Set `TRAIN.DATASET.ROOT` in `trainer/configs/base.json`.
+2. Generate **WAFT pseudo depth** → `pseudo_depth_ssl_waft_stereo/` (required for `train.py` initialization).
+3. **No `dynamic_mask.txt` needed for training** — dynamic/static is inferred online (`||v|| >= 0.20 m/frame`).
+
+```bash
+pixi run test-data   # verify paths
+```
+
 ### Stage 1: Multi-View 3D Auto-Labeling Training
 
-Training entry points live under `trainer/`:
+Training entry points under `trainer/` — see [trainer/README.md](trainer/README.md) for full details.
 
-| Script | Purpose |
-|--------|---------|
-| `train.py` | Standard VSRD++ (attribute init + online dynamic/static) |
-| `train_no_init.py` | Ablation: skip attribute initialization |
-| `train_ablation.py` | Mask-erode robustness (`--erode_ratio`) |
-| `train_sharded.py` | 64-way split training |
-| `train_legacy.py` | Deprecated; do not use for new runs |
+#### Weights & Biases API key (recommended via `.env`)
+
+This repo supports local `.env` loading (not committed) for secrets like `WANDB_API_KEY`:
+
+```bash
+cp .env.sample .env
+# edit .env and set WANDB_API_KEY=...
+```
+
+| Script | When to use |
+|--------|-------------|
+| **`train.py`** | Standard training (recommended): pseudo-depth init + online dynamic/static |
+| **`train_no_init.py`** | Ablation: skip attribute initialization |
+| **`train_ablation.py`** | Ablation: mask erode (`--erode_ratio`) |
+| **`train_sharded.py`** | 64-way split for cluster jobs (`SPLITS64/sub_XX`) |
 
 **Recommended (single GPU):**
 
@@ -298,44 +318,79 @@ pixi run train-no-init -- --config_path sequence_07 --device_id 0
 pixi run train-ablation -- --config_path ablation_selective --device_id 0 --erode_ratio 0.03
 ```
 
-Shell helpers in `trainer/scripts/` (mirror the Python entry points):
+Enable Weights & Biases logging (optional):
 
-| Script | Calls |
-|--------|--------|
-| `train.sh` | `train.py` (default) or `train_no_init.py` via `run_with_init` / `run_no_init` |
-| `train_smoke.sh` | Single-GPU smoke test with `train.py` |
-| `train_ablation.sh` | `train_ablation.py` + `--erode_ratio` |
+```bash
+pixi run train -- --config_path sequence_07 --device_id 0 --wandb --wandb_entity "liuzihua1004" --wandb_project "VSRD-plus-plus" --wandb_log_images
+```
+
+Default run name (if you don't pass `--wandb_name`) is:
+`{config_path}-{hostname}-{YYYYMMDD-HHMMSS}`.
+
+You can override it either way:
+
+```bash
+# via env (for trainer/scripts/*.sh)
+WANDB_NAME="seq07-test" USE_WANDB=1 pixi run bash trainer/scripts/train.sh
+
+# via CLI (for pixi run train / train.py)
+pixi run train -- --config_path sequence_07 --device_id 0 --wandb --wandb_name "seq07-test"
+```
+
+**Smoke test** (same `train.py` + initialization; config `smoke.json`; use a short `FILENAMES` list for speed):
+
+```bash
+pixi run train-smoke
+# optional: custom writable output paths
+CKPT_DIRNAME=$HOME/vsrd_smoke/ckpts LOG_DIRNAME=$HOME/vsrd_smoke/logs pixi run train-smoke
+```
+
+**Custom checkpoint / log / output roots** (`train.py`, `train_no_init.py`, `train_ablation.py`):
+
+```bash
+train.py --config_path sequence_07 --device_id 0 \
+  --ckpt_dirname /path/to/ckpts \
+  --log_dirname  /path/to/logs \
+  --out_dirname  /path/to/outs
+```
+
+Default output (when omitted): `trainer/ckpts/{MODEL_TYPE}/`, `trainer/logs/`, `trainer/outs/` — each frame under a dataset-relative subfolder.
+
+Shell helpers in `trainer/scripts/`:
+
+| Script | Purpose |
+|--------|---------|
+| `train.sh` | `train.py` or `train_no_init.py` (`run_with_init` / `run_no_init`) |
+| `train_smoke.sh` | Single-GPU smoke test |
+| `train_ablation.sh` | `train_ablation.py` + `ERODE_RATIO` env var |
 | `train_sharded.sh` | `train_sharded.py` for SPLITS64 |
-| `train_tsubame.sh` | Tsubame cluster job wrapper for `train.py` |
+| `train_tsubame.sh` | Tsubame cluster job template |
 
 ```bash
 cd trainer/scripts
-sh train.sh              # default: with attribute init
-# or switch mode inside train.sh: run_no_init
-
+sh train.sh
 ERODE_RATIO=0.05 sh train_ablation.sh
-pixi run train-shell     # same as train.sh from repo root
+pixi run train-shell
 pixi run train-smoke
 ```
 
-`--config_path` accepts a config stem (`sequence_07`, `ablation_selective`) or bare sequence id (`07` → `sequence_07.json`).
+`--config_path` accepts `sequence_07`, bare id `07`, `smoke`, `ablation_selective`, etc.
 
-### Stage 1: Ablation Studies
-
-For mask-quality ablations with custom erode ratios:
+**Sharded training (cluster):**
 
 ```bash
-cd trainer/scripts
-ERODE_RATIO=0.03 CONFIG_PATH=ablation_selective sh train_ablation.sh
-
-# from repo root:
-ERODE_RATIO=0.03 CONFIG_PATH=ablation_selective bash trainer/scripts/train_ablation.sh
+train_sharded.py --config_path 48 --device_id 0 \
+  --saved_ckpt_path /path/to/output_models
 ```
 
-Optional environment variables:
-- `CONFIG_PATH`: e.g. `ablation_selective`
-- `ERODE_RATIO`: mask erode ratio (0.0–1.0)
-- `CKPT_DIRNAME`, `LOG_DIRNAME`, `OUT_DIRNAME`: custom output paths
+### Training vs validator: dynamic labels
+
+| Stage | Dynamic/static source |
+|-------|------------------------|
+| **Training** | Online from GT 3D bbox velocity (0.20 m/frame) |
+| **Validator** | `dynamic_attributes_est_gt/<sequence>/dynamic_mask.txt` |
+
+Generate `dynamic_mask.txt` only before evaluation: `pixi run gen-dynamic`
 
 ---
 
@@ -381,22 +436,34 @@ See [preprocessing/Dynamic_Labels/README.md](preprocessing/Dynamic_Labels/README
 
 #### 2.1 Training Configuration
 
-Configs are JSON under `trainer/configs/`:
+Configs are JSON under `trainer/configs/` (see [trainer/README.md](trainer/README.md)):
 
 ```
 trainer/configs/
-├── base.json              # defaults + DATASET.ROOT (edit this first)
+├── base.json              # defaults + DATASET.ROOT (edit first)
 ├── sequence_XX.json       # one sequence per file (FILENAMES only)
-├── smoke.json             # smoke test config (same training settings as base; use a short FILENAMES list)
+├── smoke.json             # smoke test (short FILENAMES recommended)
 ├── ablation_selective.json
 ├── ablation_full.json
 ├── inference.json
 └── SPLITS64/split_sub.json
 ```
 
-`DYNAMIC_LABELS_PATH` is **auto-derived** from `FILENAMES` for standard sequences (`dynamic_attributes_est_gt/<sequence>/dynamic_mask.txt`). Custom ablation/split configs set it explicitly.
+Example `sequence_07.json`:
 
-Load in code: `from trainer.configs import load_config; cfg = load_config("07")`
+```json
+{
+  "TRAIN": {
+    "DATASET": {
+      "FILENAMES": [
+        "filenames/R50-N16-M128-B16/2013_05_28_drive_0007_sync/sampled_image_filenames.txt"
+      ]
+    }
+  }
+}
+```
+
+`load_config("sequence_07")` auto-derives `DYNAMIC_LABELS_PATH` for validator/compare scripts only.
 
 Key fields in `base.json`:
 
@@ -404,6 +471,7 @@ Key fields in `base.json`:
 {
   "TRAIN": {
     "DATASET": { "ROOT": "/path/to/KITTI360_For_Upload" },
+    "MODEL_TYPE": "with_pseudo_depth_ssl_igevstereo",
     "USE_RDF_MODELING": true,
     "USE_DYNAMIC_MASK": true,
     "USE_DYNAMIC_MODELING": true,
@@ -413,7 +481,9 @@ Key fields in `base.json`:
 }
 ```
 
-Per-sequence paths (`FILENAMES`, `DYNAMIC_LABELS_PATH`) are relative to `DATASET.ROOT` in `sequence_XX.json`. See [preprocessing/dataset_paths.py](preprocessing/dataset_paths.py).
+Load in code: `from trainer.configs import load_config; cfg = load_config("07")`
+
+Path constants: [preprocessing/dataset_paths.py](preprocessing/dataset_paths.py).
 
 #### 2.2 Training
 
@@ -427,9 +497,12 @@ CUDA_VISIBLE_DEVICES=0 torchrun \
     train.py --config_path sequence_07 --device_id 0
 ```
 
-Notes:
-- **Pseudo depth** under `pseudo_depth_ssl_waft_stereo/` is required when attribute initialization is enabled (default in `train.py`).
-- **Dynamic labels** are **not** read at train time; motion is inferred online from 3D bbox GT velocity. Generate `dynamic_attributes_est_gt/` only before validator evaluation.
+Or from repo root: `pixi run train -- --config_path sequence_07 --device_id 0`
+
+**Notes:**
+- **Pseudo depth** under `pseudo_depth_ssl_waft_stereo/` is required for `train.py` (attribute initialization).
+- **Dynamic labels** are not read at train time; motion is inferred online from GT 3D bbox velocity.
+- Default checkpoints: `trainer/ckpts/{MODEL_TYPE}/<frame_path>/`; override with `--ckpt_dirname`, `--log_dirname`, `--out_dirname`.
 
 
 ### Phase 3: Evaluation Pipeline
@@ -513,17 +586,16 @@ sh get_mAP.sh
 | Entry | Command |
 |-------|---------|
 | Standard train | `pixi run train -- --config_path sequence_07 --device_id 0` |
+| Smoke test | `pixi run train-smoke` |
 | No attribute init | `pixi run train-no-init -- --config_path sequence_07 --device_id 0` |
 | Mask erode ablation | `pixi run train-ablation -- --config_path ablation_selective --device_id 0 --erode_ratio 0.03` |
 | Shell launcher | `pixi run train-shell` → `trainer/scripts/train.sh` |
-| Smoke test | `pixi run train-smoke` → `trainer/scripts/train_smoke.sh` |
 
-### Training Script Arguments
+### Training script arguments
 
-Run from `trainer/` (or prefix paths with `trainer/` when using pixi from repo root):
+Run from `trainer/`:
 
 ```bash
-cd trainer
 CUDA_VISIBLE_DEVICES=0 torchrun \
     --rdzv_backend c10d --rdzv_endpoint localhost:29500 \
     --nnodes 1 --nproc_per_node 1 \
@@ -532,17 +604,18 @@ CUDA_VISIBLE_DEVICES=0 torchrun \
     --device_id 0 \
     --ckpt_dirname "/path/to/ckpts" \
     --log_dirname "/path/to/logs" \
-    --out_dirname "/path/to/outputs"
+    --out_dirname "/path/to/outs"
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `--config_path` | Config stem: `sequence_07`, `ablation_selective`, or bare id `07` |
+| `--config_path` | `sequence_07`, `smoke`, `ablation_selective`, or bare id `07` |
 | `--device_id` | CUDA device index |
-| `--ckpt_dirname` | Override checkpoint directory (optional) |
-| `--log_dirname` | Override log directory (optional) |
-| `--out_dirname` | Override output directory (optional) |
-| `--erode_ratio` | (`train_ablation.py` only) mask erode ratio for robustness tests |
+| `--ckpt_dirname` | Checkpoint root (default: `trainer/ckpts/{MODEL_TYPE}/`) |
+| `--log_dirname` | Log root (default: `trainer/logs/`) |
+| `--out_dirname` | Output root (default: `trainer/outs/`) |
+| `--erode_ratio` | (`train_ablation.py` only) mask erode ratio |
+| `--saved_ckpt_path` | (`train_sharded.py` only) root for sharded ckpts/logs/outs |
 
 ### Dynamic Modeling Types
 
@@ -600,24 +673,6 @@ sh visualization_bev.sh
 
 ---
 
-
-### Custom Output Directories
-
-```bash
-cd trainer
-CUDA_VISIBLE_DEVICES=0 torchrun \
-    --rdzv_backend c10d --rdzv_endpoint localhost:29500 \
-    --nnodes 1 --nproc_per_node 1 \
-    train.py \
-    --config_path ablation_selective \
-    --device_id 0 \
-    --ckpt_dirname "/path/to/ckpts" \
-    --log_dirname "/path/to/logs" \
-    --out_dirname "/path/to/outputs"
-```
-
----
-
 ## 📁 Sub-modules
 
 Detailed documentation for each module:
@@ -627,42 +682,25 @@ Detailed documentation for each module:
   - Initial attribute estimation (online dynamic/static)
   - Dynamic label export (`Dynamic_Labels/`)
 
-- **[trainer/](trainer/README.md)**: Core training code for Stage 1
-  - `train.py`, `train_no_init.py`, `train_ablation.py`, `train_sharded.py`
-  - Multi-view 3D auto-labeling, dynamic object modeling, volumetric rendering
+- **[trainer/](trainer/README.md)**: Stage 1 training (`train.py`, ablations, smoke test, configs)
 
-- **[validator/](validator/README.md)**: Evaluation tools and metrics
-  - Prediction generation (reads `dynamic_mask.txt`)
-  - KITTI format conversion
-  - IoU and mAP calculation
-  - Visualization tools
+- **[validator/](validator/README.md)**: Stage 1 evaluation (IoU, mAP, visualization)
 
 ---
 
 ## 🔬 Ablation Studies
 
-### Main Ablation Settings
+| Ablation | Script | How |
+|----------|--------|-----|
+| w/o attribute initialization | `train_no_init.py` | Skips `estimate_initial_attributes()` |
+| Mask quality / erode | `train_ablation.py` | `--erode_ratio 0.05` (0.0–1.0) |
+| w/o dynamic modeling | config | `USE_DYNAMIC_MODELING: false` in `base.json` |
+| Dynamic modeling type | config | `DYNAMIC_MODELING_TYPE`: `mlp`, `vector_velocity`, `scalar_velocity` |
 
-1. **Dynamic Modeling**: Enable/disable dynamic object modeling
-2. **Pseudo Attribute Initialization**: Use/ignore initial attributes from LiDAR
-3. **Mask Quality**: Test with different erode ratios (0.0, 0.05, 0.10)
-
-### Configuration Example
-
-Edit `trainer/configs/base.json` or a per-sequence file such as `sequence_07.json`:
-
-```json
-{
-  "TRAIN": {
-    "USE_RDF_MODELING": true,
-    "USE_DYNAMIC_MASK": true,
-    "USE_DYNAMIC_MODELING": true,
-    "DYNAMIC_MODELING_TYPE": "vector_velocity"
-  }
-}
+```bash
+pixi run train-no-init -- --config_path sequence_07 --device_id 0
+pixi run train-ablation -- --config_path ablation_selective --device_id 0 --erode_ratio 0.05
 ```
-
-`DYNAMIC_MODELING_TYPE`: `mlp`, `vector_velocity`, or `scalar_velocity`.
 
 ---
 

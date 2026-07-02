@@ -1,0 +1,468 @@
+[data] config_path=ablation_selective
+[data] dataset_root=/media/zliu/data12/dataset/KITTI/KITTI360_For_Upload
+[data] filenames_files=1 (txt/json entries)
+[data] batch_size=1 num_source_frames=16 num_workers=4
+[data] dataset_len=908
+[data] loader_len=908 (batches)
+  0%|                                                                           | 0/908 [00:00<?, ?it/s]INFO: 2026-07-02 17:05:09,440: ========== Multi-View Auto-Labeling Start ===================================
+[data] first_batch_loaded (keys=['boxes_3d', 'intrinsic_matrix', 'rectification_matrix', 'filename', 'hard_masks', 'soft_masks']...)
+current ckpt dirname:  /media/zliu/data12/IJCV/vsrdpp/ckpts/data_2d_raw/2013_05_28_drive_0010_sync/image_00/data_rect/0000002853
+current log dirname:  /media/zliu/data12/IJCV/vsrdpp/logs/data_2d_raw/2013_05_28_drive_0010_sync/image_00/data_rect/0000002853
+current out dirname:  /media/zliu/data12/IJCV/vsrdpp/outs/data_2d_raw/2013_05_28_drive_0010_sync/image_00/data_rect/0000002853
+Founded Instances to be optimized, where the instance nums is 13
+INFO: 2026-07-02 17:05:09,440: Datasets length: 908
+INFO: 2026-07-02 17:05:09,445: Models: {'detector': BoxParameters3D_With_Velocity(), 'hyper_distance_field': HyperDistanceField(
+  (hypernetwork): Sequential(
+    (0): Sequential(
+      (0): Linear(in_features=256, out_features=256, bias=True)
+      (1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+      (2): GELU(approximate='none')
+    )
+    (1): Sequential(
+      (0): Linear(in_features=256, out_features=256, bias=True)
+      (1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+      (2): GELU(approximate='none')
+    )
+    (2): Sequential(
+      (0): Linear(in_features=256, out_features=256, bias=True)
+      (1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+      (2): GELU(approximate='none')
+    )
+    (3): Sequential(
+      (0): Linear(in_features=256, out_features=256, bias=True)
+      (1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+      (2): GELU(approximate='none')
+    )
+    (4): Sequential(
+      (0): Linear(in_features=256, out_features=1617, bias=True)
+    )
+  )
+), 'positional_encoder': SinusoidalEncoder()}
+[init] computing initial values ...
+100%|███████████████████████████████████████████████████████████████████| 17/17 [00:09<00:00,  1.74it/s]
+100%|███████████████████████████████████████████████████████████████████| 17/17 [00:09<00:00,  1.79it/s]INFO: 2026-07-02 17:05:51,074: [Training] Rank: 0, Step: 49, Progress: 0.00%, ETA: 25 days, 20:07:11.879629, scalars: {
+[init] completed, assigned as initial (roi_lidar_valid=True)
+    "losses/iou_projection_loss": 0.31413033604621887,                | 49/3000 [00:13<13:49,  3.56it/s]
+    "losses/l1_projection_loss": 7.099239349365234,
+    "losses/silhouette_loss": 0.09350211918354034,
+    "losses/location_loss": 0.4404977858066559,
+    "losses/velocity_loss": 6.635895260842517e-05,
+    "losses/eikonal_loss": 0.015237185172736645,
+    "metrics/iou_3d": 0.385070919181221,
+    "metrics/iou_bev": 0.4234279181029323,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.7692307829856873,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.009261187281287955,
+    "learning_rates/detector/dimensions": 0.009261187281287955,
+    "learning_rates/detector/orientations": 0.009261187281287955,
+    "learning_rates/detector/embeddings": 0.0009261187281287955,
+    "learning_rates/hyper_distance_field": 0.004630593640643978,
+    "hyperparameters/sdf_union_temperature": 0.9994077069714595,
+    "hyperparameters/sdf_std_deviation": 0.9994077069714595,
+    "hyperparameters/cosine_ratio": 0.01633333333333333
+}
+INFO: 2026-07-02 17:05:51,074: [Training] Rank: 0, Step: 49, Progress: 0.00%, ETA: 25 days, 20:07:11.879629, runtimes: {
+    "forward": 0.6885301787626726,
+    "backward": 0.13051084963064222,
+    "logging": 0.00051552002799892
+}
+                                                                                                        INFO: 2026-07-02 17:06:05,550: [Training] Rank: 0, Step: 99, Progress: 0.00%, ETA: 9 days, 7:46:16.259228, scalars: {
+    "losses/iou_projection_loss": 0.2939811050891876,                 | 99/3000 [00:28<14:09,  3.41it/s]
+    "losses/l1_projection_loss": 6.471873760223389,
+    "losses/silhouette_loss": 0.09075945615768433,
+    "losses/location_loss": 0.38379448652267456,
+    "losses/velocity_loss": 0.00015599279140587896,
+    "losses/eikonal_loss": 0.014584866352379322,
+    "metrics/iou_3d": 0.38805655371932357,
+    "metrics/iou_bev": 0.4211779286136674,
+    "metrics/accuracy_3d_25": 0.7692307829856873,
+    "metrics/accuracy_bev_25": 0.7692307829856873,
+    "metrics/accuracy_3d_50": 0.3076923191547394,
+    "metrics/accuracy_bev_50": 0.3076923191547394,
+    "learning_rates/detector/locations": 0.00857695898590898,
+    "learning_rates/detector/dimensions": 0.00857695898590898,
+    "learning_rates/detector/orientations": 0.00857695898590898,
+    "learning_rates/detector/embeddings": 0.000857695898590898,
+    "learning_rates/hyper_distance_field": 0.00428847949295449,
+    "hyperparameters/sdf_union_temperature": 0.9975838653961445,
+    "hyperparameters/sdf_std_deviation": 0.9975838653961445,
+    "hyperparameters/cosine_ratio": 0.033
+}
+INFO: 2026-07-02 17:06:05,550: [Training] Rank: 0, Step: 99, Progress: 0.00%, ETA: 9 days, 7:46:16.259228, runtimes: {
+    "forward": 0.16496307629034854,
+    "backward": 0.13025496494199515,
+    "logging": 0.0005255482843101718
+}
+                                                                                                        INFO: 2026-07-02 17:06:19,877: [Training] Rank: 0, Step: 149, Progress: 0.01%, ETA: 8 days, 23:32:43.034815, scalars: {
+    "losses/iou_projection_loss": 0.27793794870376587,               | 149/3000 [00:42<13:23,  3.55it/s]
+    "losses/l1_projection_loss": 6.095050811767578,
+    "losses/silhouette_loss": 0.08994217216968536,
+    "losses/location_loss": 0.38924989104270935,
+    "losses/velocity_loss": 7.315987022593617e-05,
+    "losses/eikonal_loss": 0.014319680631160736,
+    "metrics/iou_3d": 0.3937228539349836,
+    "metrics/iou_bev": 0.42423525812871793,
+    "metrics/accuracy_3d_25": 0.7692307829856873,
+    "metrics/accuracy_bev_25": 0.7692307829856873,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.00794328234724287,
+    "learning_rates/detector/dimensions": 0.00794328234724287,
+    "learning_rates/detector/orientations": 0.00794328234724287,
+    "learning_rates/detector/embeddings": 0.000794328234724287,
+    "learning_rates/hyper_distance_field": 0.003971641173621435,
+    "hyperparameters/sdf_union_temperature": 0.9945332275569517,
+    "hyperparameters/sdf_std_deviation": 0.9945332275569517,
+    "hyperparameters/cosine_ratio": 0.049666666666666665
+}
+INFO: 2026-07-02 17:06:19,877: [Training] Rank: 0, Step: 149, Progress: 0.01%, ETA: 8 days, 23:32:43.034815, runtimes: {
+    "forward": 0.15463136880608164,
+    "backward": 0.12969639483919146,
+    "logging": 0.0005494322128937002
+}
+                                                                                                        INFO: 2026-07-02 17:06:34,235: [Training] Rank: 0, Step: 199, Progress: 0.01%, ETA: 9 days, 0:30:22.777249, scalars: {
+    "losses/iou_projection_loss": 0.2688068449497223,                | 199/3000 [00:57<13:16,  3.51it/s]
+    "losses/l1_projection_loss": 5.864932537078857,
+    "losses/silhouette_loss": 0.08888816088438034,
+    "losses/location_loss": 0.37815985083580017,
+    "losses/velocity_loss": 0.00012761191464960575,
+    "losses/eikonal_loss": 0.014212686568498611,
+    "metrics/iou_3d": 0.3861681776042047,
+    "metrics/iou_bev": 0.41247529646125874,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.7692307829856873,
+    "metrics/accuracy_3d_50": 0.3076923191547394,
+    "metrics/accuracy_bev_50": 0.3076923191547394,
+    "learning_rates/detector/locations": 0.007356422544596482,
+    "learning_rates/detector/dimensions": 0.007356422544596482,
+    "learning_rates/detector/orientations": 0.007356422544596482,
+    "learning_rates/detector/embeddings": 0.0007356422544596483,
+    "learning_rates/hyper_distance_field": 0.003678211272298241,
+    "hyperparameters/sdf_union_temperature": 0.9902641550401511,
+    "hyperparameters/sdf_std_deviation": 0.9902641550401511,
+    "hyperparameters/cosine_ratio": 0.06633333333333333
+}
+INFO: 2026-07-02 17:06:34,235: [Training] Rank: 0, Step: 199, Progress: 0.01%, ETA: 9 days, 0:30:22.777249, runtimes: {
+    "forward": 0.1564710357161855,
+    "backward": 0.12915325567873742,
+    "logging": 0.0005283230026144398
+}
+                                                                                                        INFO: 2026-07-02 17:06:48,484: [Training] Rank: 0, Step: 249, Progress: 0.01%, ETA: 8 days, 22:50:42.335452, scalars: {
+    "losses/iou_projection_loss": 0.2612791657447815,                | 249/3000 [01:11<12:58,  3.53it/s]
+    "losses/l1_projection_loss": 5.671721935272217,
+    "losses/silhouette_loss": 0.09169629961252213,
+    "losses/location_loss": 0.3831351399421692,
+    "losses/velocity_loss": 5.678214074578136e-05,
+    "losses/eikonal_loss": 0.01454885769635439,
+    "metrics/iou_3d": 0.3845301496103698,
+    "metrics/iou_bev": 0.41448745227784767,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.7692307829856873,
+    "metrics/accuracy_3d_50": 0.3076923191547394,
+    "metrics/accuracy_bev_50": 0.3076923191547394,
+    "learning_rates/detector/locations": 0.006812920690579694,
+    "learning_rates/detector/dimensions": 0.006812920690579694,
+    "learning_rates/detector/orientations": 0.006812920690579694,
+    "learning_rates/detector/embeddings": 0.0006812920690579697,
+    "learning_rates/hyper_distance_field": 0.003406460345289847,
+    "hyperparameters/sdf_union_temperature": 0.9847883490767716,
+    "hyperparameters/sdf_std_deviation": 0.9847883490767716,
+    "hyperparameters/cosine_ratio": 0.083
+}
+INFO: 2026-07-02 17:06:48,484: [Training] Rank: 0, Step: 249, Progress: 0.01%, ETA: 8 days, 22:50:42.335452, runtimes: {
+    "forward": 0.1543422823670871,
+    "backward": 0.12907552642224657,
+    "logging": 0.0005443946031268836
+}
+                                                                                                        INFO: 2026-07-02 17:07:02,867: [Training] Rank: 0, Step: 299, Progress: 0.01%, ETA: 9 days, 0:10:24.553103, scalars: {
+    "losses/iou_projection_loss": 0.256095826625824,                 | 299/3000 [01:25<12:43,  3.54it/s]
+    "losses/l1_projection_loss": 5.557626724243164,
+    "losses/silhouette_loss": 0.0890495702624321,
+    "losses/location_loss": 0.3792676031589508,
+    "losses/velocity_loss": 0.00010846944496734068,
+    "losses/eikonal_loss": 0.013414427638053894,
+    "metrics/iou_3d": 0.38725573948893766,
+    "metrics/iou_bev": 0.41811065206927733,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.7692307829856873,
+    "metrics/accuracy_3d_50": 0.3076923191547394,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.006309573444802024,
+    "learning_rates/detector/dimensions": 0.006309573444802024,
+    "learning_rates/detector/orientations": 0.006309573444802024,
+    "learning_rates/detector/embeddings": 0.000630957344480203,
+    "learning_rates/hyper_distance_field": 0.003154786722401012,
+    "hyperparameters/sdf_union_temperature": 0.9781208184703403,
+    "hyperparameters/sdf_std_deviation": 0.9781208184703403,
+    "hyperparameters/cosine_ratio": 0.09966666666666667
+}
+INFO: 2026-07-02 17:07:02,868: [Training] Rank: 0, Step: 299, Progress: 0.01%, ETA: 9 days, 0:10:24.553103, runtimes: {
+    "forward": 0.1555161178998207,
+    "backward": 0.12966616346825421,
+    "logging": 0.0005409140570793136
+}
+                                                                                                        INFO: 2026-07-02 17:07:17,077: [Training] Rank: 0, Step: 349, Progress: 0.01%, ETA: 9 days, 0:46:15.151380, scalars: {
+    "losses/iou_projection_loss": 0.2522445023059845,                | 349/3000 [01:39<13:08,  3.36it/s]
+    "losses/l1_projection_loss": 5.456557750701904,
+    "losses/silhouette_loss": 0.08966328948736191,
+    "losses/location_loss": 0.38307058811187744,
+    "losses/velocity_loss": 7.884923252277076e-05,
+    "losses/eikonal_loss": 0.012738310731947422,
+    "metrics/iou_3d": 0.3858664384100544,
+    "metrics/iou_bev": 0.41543587245394636,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.692307710647583,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.005843414133735275,
+    "learning_rates/detector/dimensions": 0.005843414133735275,
+    "learning_rates/detector/orientations": 0.005843414133735275,
+    "learning_rates/detector/embeddings": 0.0005843414133735277,
+    "learning_rates/hyper_distance_field": 0.0029217070668676377,
+    "hyperparameters/sdf_union_temperature": 0.9702798384587951,
+    "hyperparameters/sdf_std_deviation": 0.9702798384587951,
+    "hyperparameters/cosine_ratio": 0.11633333333333333
+}
+INFO: 2026-07-02 17:07:17,078: [Training] Rank: 0, Step: 349, Progress: 0.01%, ETA: 9 days, 0:46:15.151380, runtimes: {
+    "forward": 0.15765270069782472,
+    "backward": 0.12832528723001316,
+    "logging": 0.0005400539873423528
+}
+                                                                                                        INFO: 2026-07-02 17:07:31,258: [Training] Rank: 0, Step: 399, Progress: 0.01%, ETA: 8 days, 22:26:11.572618, scalars: {
+    "losses/iou_projection_loss": 0.24983811378479004,               | 399/3000 [01:54<12:09,  3.57it/s]
+    "losses/l1_projection_loss": 5.391017436981201,
+    "losses/silhouette_loss": 0.09047528356313705,
+    "losses/location_loss": 0.3836126923561096,
+    "losses/velocity_loss": 0.0001014493391267024,
+    "losses/eikonal_loss": 0.013053315691649914,
+    "metrics/iou_3d": 0.3858654882136174,
+    "metrics/iou_bev": 0.4145536810765083,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.692307710647583,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.005411695265464741,
+    "learning_rates/detector/dimensions": 0.005411695265464741,
+    "learning_rates/detector/orientations": 0.005411695265464741,
+    "learning_rates/detector/embeddings": 0.0005411695265464745,
+    "learning_rates/hyper_distance_field": 0.0027058476327323703,
+    "hyperparameters/sdf_union_temperature": 0.9612869006233274,
+    "hyperparameters/sdf_std_deviation": 0.9612869006233274,
+    "hyperparameters/cosine_ratio": 0.133
+}
+INFO: 2026-07-02 17:07:31,258: [Training] Rank: 0, Step: 399, Progress: 0.01%, ETA: 8 days, 22:26:11.572618, runtimes: {
+    "forward": 0.15445976193761107,
+    "backward": 0.12842773156402182,
+    "logging": 0.0005503421496310348
+}
+                                                                                                        INFO: 2026-07-02 17:07:45,532: [Training] Rank: 0, Step: 449, Progress: 0.02%, ETA: 8 days, 23:50:46.522845, scalars: {
+    "losses/iou_projection_loss": 0.24756380915641785,               | 449/3000 [02:08<11:58,  3.55it/s]
+    "losses/l1_projection_loss": 5.353705883026123,
+    "losses/silhouette_loss": 0.09053981304168701,
+    "losses/location_loss": 0.38196176290512085,
+    "losses/velocity_loss": 4.404060382512398e-05,
+    "losses/eikonal_loss": 0.013570189476013184,
+    "metrics/iou_3d": 0.38564836329548,
+    "metrics/iou_bev": 0.41370633153789077,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.692307710647583,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.005011872336272833,
+    "learning_rates/detector/dimensions": 0.005011872336272833,
+    "learning_rates/detector/orientations": 0.005011872336272833,
+    "learning_rates/detector/embeddings": 0.0005011872336272837,
+    "learning_rates/hyper_distance_field": 0.0025059361681364165,
+    "hyperparameters/sdf_union_temperature": 0.9511666539814534,
+    "hyperparameters/sdf_std_deviation": 0.9511666539814534,
+    "hyperparameters/cosine_ratio": 0.14966666666666667
+}
+INFO: 2026-07-02 17:07:45,533: [Training] Rank: 0, Step: 449, Progress: 0.02%, ETA: 8 days, 23:50:46.522845, runtimes: {
+    "forward": 0.15604538750499453,
+    "backward": 0.12872252513249643,
+    "logging": 0.0005384843584267314
+}
+                                                                                                        INFO: 2026-07-02 17:07:59,691: [Training] Rank: 0, Step: 499, Progress: 0.02%, ETA: 8 days, 22:08:57.182641, scalars: {
+    "losses/iou_projection_loss": 0.24610550701618195,               | 499/3000 [02:22<11:44,  3.55it/s]
+    "losses/l1_projection_loss": 5.300286293029785,
+    "losses/silhouette_loss": 0.08422693610191345,
+    "losses/location_loss": 0.38308483362197876,
+    "losses/velocity_loss": 6.182784272823483e-05,
+    "losses/eikonal_loss": 0.012991048395633698,
+    "metrics/iou_3d": 0.3869507285255611,
+    "metrics/iou_bev": 0.4145913885077724,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.692307710647583,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.004641588833612887,
+    "learning_rates/detector/dimensions": 0.004641588833612887,
+    "learning_rates/detector/orientations": 0.004641588833612887,
+    "learning_rates/detector/embeddings": 0.00046415888336128977,
+    "learning_rates/hyper_distance_field": 0.0023207944168064437,
+    "hyperparameters/sdf_union_temperature": 0.9399468374257685,
+    "hyperparameters/sdf_std_deviation": 0.9399468374257685,
+    "hyperparameters/cosine_ratio": 0.16633333333333333
+}
+INFO: 2026-07-02 17:07:59,691: [Training] Rank: 0, Step: 499, Progress: 0.02%, ETA: 8 days, 22:08:57.182641, runtimes: {
+    "forward": 0.15404735209401194,
+    "backward": 0.12847963235596507,
+    "logging": 0.0005414567369286384
+}
+                                                                                                        INFO: 2026-07-02 17:08:14,621: [Training] Rank: 0, Step: 549, Progress: 0.02%, ETA: 8 days, 23:10:29.524268, scalars: {
+    "losses/iou_projection_loss": 0.2451288253068924,                | 549/3000 [02:37<11:31,  3.55it/s]
+    "losses/l1_projection_loss": 5.271764755249023,
+    "losses/silhouette_loss": 0.0844821035861969,
+    "losses/location_loss": 0.38300660252571106,
+    "losses/velocity_loss": 1.98804718820611e-05,
+    "losses/eikonal_loss": 0.012978509068489075,
+    "metrics/iou_3d": 0.3890190351501574,
+    "metrics/iou_bev": 0.4164001514412353,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.692307710647583,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.004298662347082388,
+    "learning_rates/detector/dimensions": 0.004298662347082388,
+    "learning_rates/detector/orientations": 0.004298662347082388,
+    "learning_rates/detector/embeddings": 0.00042986623470823955,
+    "learning_rates/hyper_distance_field": 0.002149331173541194,
+    "hyperparameters/sdf_union_temperature": 0.9276582036935717,
+    "hyperparameters/sdf_std_deviation": 0.9276582036935717,
+    "hyperparameters/cosine_ratio": 0.183
+}
+INFO: 2026-07-02 17:08:14,621: [Training] Rank: 0, Step: 549, Progress: 0.02%, ETA: 8 days, 23:10:29.524268, runtimes: {
+    "forward": 0.154942283136087,
+    "backward": 0.12860606404479666,
+    "logging": 0.0008810492972119541
+}
+                                                                                                        INFO: 2026-07-02 17:08:28,878: [Training] Rank: 0, Step: 599, Progress: 0.02%, ETA: 8 days, 23:25:11.520598, scalars: {
+    "losses/iou_projection_loss": 0.24332532286643982,               | 599/3000 [02:51<11:25,  3.50it/s]
+    "losses/l1_projection_loss": 5.248302936553955,
+    "losses/silhouette_loss": 0.08927293866872787,
+    "losses/location_loss": 0.3805525302886963,
+    "losses/velocity_loss": 6.208132253959775e-05,
+    "losses/eikonal_loss": 0.012229873798787594,
+    "metrics/iou_3d": 0.389350786419406,
+    "metrics/iou_bev": 0.4165499250942275,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.692307710647583,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.003981071705535087,
+    "learning_rates/detector/dimensions": 0.003981071705535087,
+    "learning_rates/detector/orientations": 0.003981071705535087,
+    "learning_rates/detector/embeddings": 0.00039810717055350917,
+    "learning_rates/hyper_distance_field": 0.0019905358527675435,
+    "hyperparameters/sdf_union_temperature": 0.9143344350757509,
+    "hyperparameters/sdf_std_deviation": 0.9143344350757509,
+    "hyperparameters/cosine_ratio": 0.19966666666666666
+}
+INFO: 2026-07-02 17:08:28,878: [Training] Rank: 0, Step: 599, Progress: 0.02%, ETA: 8 days, 23:25:11.520598, runtimes: {
+    "forward": 0.15514414708769392,
+    "backward": 0.12908190501969624,
+    "logging": 0.0005324247374621904
+}
+                                                                                                        INFO: 2026-07-02 17:08:43,295: [Training] Rank: 0, Step: 649, Progress: 0.02%, ETA: 9 days, 1:54:38.402729, scalars: {
+    "losses/iou_projection_loss": 0.2427881509065628,                | 649/3000 [03:06<11:09,  3.51it/s]
+    "losses/l1_projection_loss": 5.233870983123779,
+    "losses/silhouette_loss": 0.08592808246612549,
+    "losses/location_loss": 0.37989914417266846,
+    "losses/velocity_loss": 9.167372627416626e-05,
+    "losses/eikonal_loss": 0.011586402542889118,
+    "metrics/iou_3d": 0.3914138161166472,
+    "metrics/iou_bev": 0.4182317458216235,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.692307710647583,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.00368694506451969,
+    "learning_rates/detector/dimensions": 0.00368694506451969,
+    "learning_rates/detector/orientations": 0.00368694506451969,
+    "learning_rates/detector/embeddings": 0.0003686945064519695,
+    "learning_rates/hyper_distance_field": 0.001843472532259845,
+    "hyperparameters/sdf_union_temperature": 0.9000120510959635,
+    "hyperparameters/sdf_std_deviation": 0.9000120510959635,
+    "hyperparameters/cosine_ratio": 0.21633333333333332
+}
+INFO: 2026-07-02 17:08:43,295: [Training] Rank: 0, Step: 649, Progress: 0.02%, ETA: 9 days, 1:54:38.402729, runtimes: {
+    "forward": 0.1575294468353751,
+    "backward": 0.12999318362924553,
+    "logging": 0.0005336658881719248
+}
+                                                                                                        INFO: 2026-07-02 17:08:57,631: [Training] Rank: 0, Step: 699, Progress: 0.03%, ETA: 9 days, 0:37:27.971464, scalars: {
+    "losses/iou_projection_loss": 0.24201491475105286,               | 699/3000 [03:20<10:56,  3.51it/s]
+    "losses/l1_projection_loss": 5.205453872680664,
+    "losses/silhouette_loss": 0.08642636239528656,
+    "losses/location_loss": 0.3805293142795563,
+    "losses/velocity_loss": 5.990033969283104e-05,
+    "losses/eikonal_loss": 0.012425803579390049,
+    "metrics/iou_3d": 0.39357711286580543,
+    "metrics/iou_bev": 0.4204270327697498,
+    "metrics/accuracy_3d_25": 0.692307710647583,
+    "metrics/accuracy_bev_25": 0.692307710647583,
+    "metrics/accuracy_3d_50": 0.38461539149284363,
+    "metrics/accuracy_bev_50": 0.38461539149284363,
+    "learning_rates/detector/locations": 0.0034145488738337158,
+    "learning_rates/detector/dimensions": 0.0034145488738337158,
+    "learning_rates/detector/orientations": 0.0034145488738337158,
+    "learning_rates/detector/embeddings": 0.00034145488738337196,
+    "learning_rates/hyper_distance_field": 0.0017072744369168579,
+    "hyperparameters/sdf_union_temperature": 0.8847303084131612,
+    "hyperparameters/sdf_std_deviation": 0.8847303084131612,
+    "hyperparameters/cosine_ratio": 0.233
+}
+INFO: 2026-07-02 17:08:57,632: [Training] Rank: 0, Step: 699, Progress: 0.03%, ETA: 9 days, 0:37:27.971464, runtimes: {
+    "forward": 0.1572743152026411,
+    "backward": 0.12855470781797418,
+    "logging": 0.0005322611209547764
+}
+  0%|                                                                           | 0/908 [05:00<?, ?it/s]
+Traceback (most recent call last):                                                                      
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 778, in train
+    iou_projection_loss = torch.mean(torch.cat([
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 779, in <listcomp>
+    torch.cat([
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 780, in <listcomp>
+    torchvision.ops.distance_box_iou_loss(
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/site-packages/torchvision/ops/diou_loss.py", line 51, in distance_box_iou_loss
+    loss, _ = _diou_iou_loss(boxes1, boxes2, eps)
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/site-packages/torchvision/ops/diou_loss.py", line 66, in _diou_iou_loss
+    intsct, union = _loss_inter_union(boxes1, boxes2)
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 1559, in <module>
+    main(args=args)
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 1499, in main
+    train()
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 778, in train
+    iou_projection_loss = torch.mean(torch.cat([
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 778, in train
+    iou_projection_loss = torch.mean(torch.cat([
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 779, in <listcomp>
+    torch.cat([
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 780, in <listcomp>
+    torchvision.ops.distance_box_iou_loss(
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/site-packages/torchvision/ops/diou_loss.py", line 51, in distance_box_iou_loss
+    loss, _ = _diou_iou_loss(boxes1, boxes2, eps)
+  File "/home/zliu/IJCV/VSRD_plus_plus/.pixi/envs/default/lib/python3.10/site-packages/torchvision/ops/diou_loss.py", line 66, in _diou_iou_loss
+    intsct, union = _loss_inter_union(boxes1, boxes2)
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 1559, in <module>
+    main(args=args)
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 1499, in main
+    train()
+  File "/home/zliu/IJCV/VSRD_plus_plus/trainer/train.py", line 778, in train
+    iou_projection_loss = torch.mean(torch.cat([
+KeyboardInterrupt

@@ -13,6 +13,9 @@ build/
 .pixi/
 pixi.lock
 
+# ── Local secrets (never commit) ─────────────────────────────────────────────
+.env
+
 # ── Model weights & checkpoints (large files — download separately, never commit) ──
 *.pt
 *.pth

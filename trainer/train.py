@@ -54,6 +54,7 @@ from vsrd_plus_plus import visualization
 from trainer.utils.box_geo import decode_box_3d,divide_into_n_parts,get_dynamic_mask_for_the_world_output,get_dynamic_sequentail_for_the_world_output
 from trainer.utils.file_io import read_text_lines,read_complex_strings
 from preprocessing.Initial_Attributes import estimate_initial_attributes, extract_initial_attributes
+from trainer.utils.wandb_utils import maybe_init_wandb, wandb_image, wandb_log_scalars
 import re
 
 import vsrd_plus_plus
@@ -115,6 +116,9 @@ def main(args=None):
     from trainer.configs import load_config
     my_conf_train = load_config(args.config_path)
 
+    wandb = None
+    wandb_run = None
+
     
     
     
@@ -132,6 +136,13 @@ def main(args=None):
             if torch.distributed.get_rank() == rank:
                 world_size = torch.distributed.get_world_size()
                 print(f"Rank: [{rank}/{world_size}] Device ID: {device_id}")
+
+    def _log_rank0(msg: str) -> None:
+        if torch.distributed.get_rank() == 0:
+            print(msg, flush=True)
+
+    # Optional Weights & Biases logging (rank 0 only; init after process group)
+    wandb, wandb_run = maybe_init_wandb(cfg=my_conf_train, args=args, rank=torch.distributed.get_rank())
     
     
     # ================================================================
@@ -154,6 +165,11 @@ def main(args=None):
     class_names = my_conf_train.TRAIN.DATASET.CLASS_NAMES
     num_of_workers = my_conf_train.TRAIN.DATASET.NUMS_OF_WORKERS
     num_source_frames = my_conf_train.TRAIN.DATASET.NUM_SOURCE_FRAMES # 16 by default
+
+    _log_rank0(f"[data] config_path={args.config_path}")
+    _log_rank0(f"[data] dataset_root={dataset_root}")
+    _log_rank0(f"[data] filenames_files={len(train_filename_list)} (txt/json entries)")
+    _log_rank0(f"[data] batch_size={my_conf_train.TRAIN.DATASET.BATCH_SIZE} num_source_frames={num_source_frames} num_workers={num_of_workers}")
 
     # Dataset Preprocessing
     target_transforms_resize_size = my_conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.IMAGE_SIZE 
@@ -213,6 +229,7 @@ def main(args=None):
                               source_transforms=source_transforms,
                               rectification=dataset_rectification,
                               dataset_root=dataset_root)
+    _log_rank0(f"[data] dataset_len={len(datasets)}")
 
     # ====================================================================================================
     # loaders
@@ -220,6 +237,7 @@ def main(args=None):
                                     drop_last=True,
                                     pin_memory=False
                                     )
+    _log_rank0(f"[data] loader_len={len(loaders)} (batches)")
     # ====================================================================================================
     # utilities
     meters = Dict({
@@ -236,8 +254,16 @@ def main(args=None):
     
     def train():
         stop_watch.start()
+        sample_index = 0
 
         for multi_inputs in vsrd_plus_plus.distributed.tqdm(loaders):
+            if sample_index == 0 and torch.distributed.get_rank() == 0:
+                try:
+                    # Print a quick proof that the first batch is actually loaded.
+                    one = next(iter(multi_inputs.values()))
+                    _log_rank0(f"[data] first_batch_loaded (keys={list(one.keys())[:6]}...)")
+                except Exception:
+                    _log_rank0("[data] first_batch_loaded")
             
             multi_inputs = {
                 relative_index: Dict.apply({
@@ -436,7 +462,8 @@ def main(args=None):
                 )
                 
             dynamic_mask_for_target_view = [False] * num_instances
-            print("Begin Initializations..........")
+            if torch.distributed.get_rank() == 0:
+                print("[init] computing initial values ...", flush=True)
             multi_inputs = estimate_initial_attributes(
                 multi_inputs=multi_inputs,
                 device=device_id,
@@ -464,8 +491,11 @@ def main(args=None):
                                 except Exception:
                                     pass
     
-            
-            print("After initailzaition....")
+            if torch.distributed.get_rank() == 0:
+                print(
+                    f"[init] completed, assigned as initial (roi_lidar_valid={bool(init_attrs.roi_lidar_valid)})",
+                    flush=True,
+                )
             # ================================================================
             # optimizer
             if USE_DYNAMIC_MODELING_FLAG and  DYNAMIC_TYPE=='mlp':
@@ -1274,6 +1304,198 @@ def main(args=None):
                             for name, metric in scalars.items():
                                 writer.add_scalar(f"scalars/{name}", metric, step)
 
+                            # wandb scalar logging (rank 0 only)
+                            if wandb is not None and wandb_run is not None:
+                                global_step = sample_index * my_conf_train.TRAIN.OPTIMIZATION_NUM_STEPS + step
+                                wandb_log_scalars(
+                                    wandb,
+                                    wandb_run,
+                                    scalars,
+                                    step=global_step,
+                                    image_dirname=image_dirname,
+                                    local_step=step,
+                                    sample_index=sample_index,
+                                )
+
+                                # Optional: visualize PD vs GT 3D boxes on the target image
+                                if args.wandb_log_images and (
+                                    not (step + 1) % my_conf_train.TRAIN.LOGGING.IMAGE_INTERVALS
+                                ):
+                                    try:
+                                        # target image (CHW, float in [0,1])
+                                        img = target_inputs.images[0].detach().float().cpu()
+
+                                        intrinsic = None
+                                        if hasattr(target_inputs, "intrinsic_matrices"):
+                                            intrinsic = target_inputs.intrinsic_matrices[0].detach().cpu()
+                                        elif hasattr(target_inputs, "intrinsic_matrix"):
+                                            intrinsic = target_inputs.intrinsic_matrix.detach().cpu()
+
+                                        if intrinsic is not None:
+                                            # Align with validator/inference visualization:
+                                            # - 2D overlay uses camera-space corners directly with `intrinsic` (no extra rectification).
+                                            # - BEV visualization uses `rectification_matrix.T` for both GT & PD.
+                                            pd_indices, gt_indices = matched_indices[0]
+                                            pd0 = target_outputs.boxes_3d[0][pd_indices, ...].detach().cpu()
+                                            gt0 = target_inputs.boxes_3d[0][gt_indices, ...].detach().cpu()
+
+                                            rect = None
+                                            try:
+                                                rect = target_inputs.rectification_matrices[0].detach().cpu()
+                                            except Exception:
+                                                rect = None
+                                            if pd0 is not None and gt0 is not None:
+                                                line_indices = LINE_INDICES + [[0, 5], [1, 4]]
+                                                # --- 2D image overlays ---
+                                                gt_only = visualization.draw_boxes_3d(
+                                                    img,
+                                                    gt0,
+                                                    line_indices,
+                                                    intrinsic,
+                                                    color=(255, 0, 0),
+                                                    thickness=2,
+                                                )
+                                                pd_only = visualization.draw_boxes_3d(
+                                                    img,
+                                                    pd0,
+                                                    line_indices,
+                                                    intrinsic,
+                                                    color=(0, 255, 0),
+                                                    thickness=2,
+                                                )
+                                                overlay = visualization.draw_boxes_3d(
+                                                    gt_only,
+                                                    pd0,
+                                                    line_indices,
+                                                    intrinsic,
+                                                    color=(0, 255, 0),
+                                                    thickness=2,
+                                                )
+
+                                                # --- BEV overlays ---
+                                                # NOTE: draw_boxes_bev expects CHW image; float is fine.
+                                                bev = img.new_ones(3, 512, 512)
+                                                gt_bev_boxes = gt0
+                                                pd_bev_boxes = pd0
+                                                if rect is not None:
+                                                    gt_bev_boxes = gt0 @ rect.T
+                                                    pd_bev_boxes = pd0 @ rect.T
+                                                bev_gt = visualization.draw_boxes_bev(
+                                                    bev,
+                                                    gt_bev_boxes,
+                                                    color=(255, 0, 0),
+                                                    thickness=2,
+                                                )
+                                                bev_pd = visualization.draw_boxes_bev(
+                                                    bev,
+                                                    pd_bev_boxes,
+                                                    color=(0, 255, 0),
+                                                    thickness=2,
+                                                )
+                                                bev_both = visualization.draw_boxes_bev(
+                                                    bev_gt,
+                                                    pd_bev_boxes,
+                                                    color=(0, 255, 0),
+                                                    thickness=2,
+                                                )
+
+                                                imgs = {
+                                                    "viz/gt_3d": wandb_image(wandb, gt_only, caption=f"{image_dirname} step={step}"),
+                                                    "viz/pd_3d": wandb_image(wandb, pd_only, caption=f"{image_dirname} step={step}"),
+                                                    "viz/pd_vs_gt_3d": wandb_image(wandb, overlay, caption=f"{image_dirname} step={step}"),
+                                                    "viz/gt_bev": wandb_image(wandb, bev_gt, caption=f"{image_dirname} step={step}"),
+                                                    "viz/pd_bev": wandb_image(wandb, bev_pd, caption=f"{image_dirname} step={step}"),
+                                                    "viz/pd_vs_gt_bev": wandb_image(wandb, bev_both, caption=f"{image_dirname} step={step}"),
+                                                }
+
+                                                # --- Silhouette vs GT masks (sampled rays) ---
+                                                # Build *dense GT mask* + *grid-sampled PD silhouette* for the target frame (relative_index=0).
+                                                # Full-resolution volumetric rendering is too expensive; we render on a regular grid
+                                                # (stride) and upsample for visualization.
+                                                try:
+                                                    H, W = img.shape[-2:]
+                                                    frame_idx = 0
+                                                    pd_idx0 = int(pd_indices[0].item()) if hasattr(pd_indices, "numel") and pd_indices.numel() else int(pd_indices)
+                                                    gt_idx0 = int(gt_indices[0].item()) if hasattr(gt_indices, "numel") and gt_indices.numel() else int(gt_indices)
+                                                    # 1) GT dense mask (target frame) for matched GT instance
+                                                    gt_mask_full = (
+                                                        target_inputs.soft_masks[0][..., gt_idx0]
+                                                        .detach()
+                                                        .float()
+                                                        .cpu()
+                                                    )
+
+                                                    # 2) PD silhouette (grid sampled) for matched PD instance
+                                                    stride = 8  # visualization stride; smaller = denser but slower
+                                                    ys = torch.arange(0, H, stride)
+                                                    xs = torch.arange(0, W, stride)
+                                                    grid_y, grid_x = torch.meshgrid(ys, xs, indexing="ij")
+                                                    ray_idx = (grid_y * W + grid_x).flatten()
+                                                    ray_idx = ray_idx.to(device=multi_camera_positions.device, dtype=torch.long)
+
+                                                    # Render silhouette on the grid (no grad)
+                                                    with torch.no_grad():
+                                                        out = hierarchical_wrapper(rendering.hierarchical_volumetric_rendering)(
+                                                            distance_field=soft_distance_fields[frame_idx],
+                                                            ray_positions=multi_camera_positions[frame_idx : frame_idx + 1, :, :, :].flatten(0, -2)[ray_idx, ...],
+                                                            ray_directions=multi_ray_directions[frame_idx : frame_idx + 1, :, :, :].flatten(0, -2)[ray_idx, ...],
+                                                            distance_range=my_conf_train.TRAIN.VOLUME_RENDERING.DISTANCE_RANGE,
+                                                            num_samples=my_conf_train.TRAIN.VOLUME_RENDERING.NUM_FINE_SAMPLES,
+                                                            sdf_std_deviation=sdf_std_deviation,
+                                                            cosine_ratio=cosine_ratio,
+                                                        )
+                                                        pd_labels_grid = out[0] if isinstance(out, (tuple, list)) else out
+                                                    # pick the matched instance channel
+                                                    pd_prob_grid = (
+                                                        pd_labels_grid[..., pd_idx0]
+                                                        .clamp(1.0e-6, 1.0 - 1.0e-6)
+                                                        .squeeze(0)
+                                                        .detach()
+                                                        .float()
+                                                        .cpu()
+                                                    )
+                                                    pd_mask_grid = torch.zeros((H, W), dtype=torch.float32)
+                                                    pd_mask_grid[grid_y, grid_x] = pd_prob_grid.reshape(grid_y.shape)
+                                                    # upsample for display
+                                                    pd_mask_full = torch.nn.functional.interpolate(
+                                                        pd_mask_grid[None, None, ...],
+                                                        size=(H, W),
+                                                        mode="bilinear",
+                                                        align_corners=False,
+                                                    )[0, 0]
+
+                                                    imgs["viz/gt_mask_full"] = wandb_image(
+                                                        wandb,
+                                                        gt_mask_full.unsqueeze(0),
+                                                        caption=f"{image_dirname} step={step}",
+                                                    )
+                                                    imgs["viz/pd_silhouette_full"] = wandb_image(
+                                                        wandb,
+                                                        pd_mask_full.unsqueeze(0),
+                                                        caption=f"{image_dirname} step={step} (grid stride={stride})",
+                                                    )
+
+                                                    overlay_masks = visualization.draw_masks(
+                                                        img,
+                                                        torch.stack([gt_mask_full, pd_mask_full], dim=0),
+                                                        colors=torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+                                                        weight=0.35,
+                                                    )
+                                                    imgs["viz/pd_silhouette_vs_gt_mask"] = wandb_image(
+                                                        wandb,
+                                                        overlay_masks,
+                                                        caption=f"{image_dirname} step={step} (grid stride={stride})",
+                                                    )
+                                                except Exception:
+                                                    pass
+
+                                                imgs = {k: v for k, v in imgs.items() if v is not None}
+                                                if imgs:
+                                                    wandb_log_scalars(wandb, wandb_run, imgs, step=global_step)
+                                    except Exception:
+                                        # Visualization should never crash training
+                                        pass
+
                         if not (step + 1) % my_conf_train.TRAIN.LOGGING.CKPT_INTERVALS:
                     
                             saver.save(
@@ -1288,6 +1510,8 @@ def main(args=None):
                                 metrics=metrics,
                             )
                         meters.train.update(logging=stop_watch.restart())
+
+            sample_index += 1
 
         stop_watch.stop()
                             
@@ -1328,6 +1552,18 @@ def parse_args():
         type=str,
         default=None,
         help="Custom output root (default: trainer/outs).")
+
+    # --- Weights & Biases (optional) ---
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging (rank 0 only).")
+    parser.add_argument("--wandb_project", type=str, default="VSRD-plus-plus", help="wandb project name.")
+    parser.add_argument("--wandb_entity", type=str, default="liuzihua1004", help="wandb entity/team (optional).")
+    parser.add_argument("--wandb_name", type=str, default="", help="wandb run name (optional).")
+    parser.add_argument("--wandb_tags", type=str, default="", help="Comma-separated wandb tags (optional).")
+    parser.add_argument(
+        "--wandb_log_images",
+        action="store_true",
+        help="Log PD vs GT 3D box overlay images to wandb at IMAGE_INTERVALS.",
+    )
 
     # get the local rank
     args = parser.parse_args()
