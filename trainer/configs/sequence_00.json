@@ -1,9 +1,0 @@
-{
-  "TRAIN": {
-    "DATASET": {
-      "FILENAMES": [
-        "filenames/R50-N16-M128-B16/2013_05_28_drive_0000_sync/sampled_image_filenames.txt"
-      ]
-    }
-  }
-}

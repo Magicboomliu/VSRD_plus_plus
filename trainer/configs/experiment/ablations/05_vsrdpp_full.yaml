@@ -1,0 +1,13 @@
+# (5) VSRD++ Full：velocity + RDF + silhouette + projection + attribute init（完整方法）
+defaults:
+  - ../../_defaults/train
+  - ../../_defaults/launch
+  - ../../_defaults/data
+  - ../../_defaults/model
+  - ../../_defaults/optim
+  - ../../_defaults/output
+  - _dataset_casual_ablation
+
+TRAIN:
+  MODEL_TYPE: ablation_05_vsrdpp_full
+  USE_DYNAMIC_LABELS_FILE: true

@@ -1,0 +1,19 @@
+# 默认层：输出路径 / logging / wandb
+TRAIN:
+  OUTPUT:
+    # 留空 → trainer/ckpts/{MODEL_TYPE}、trainer/logs、trainer/outs
+    CKPT_ROOT: ""
+    LOG_ROOT: ""
+    OUT_ROOT: ""
+  LOGGING:
+    CKPT_INTERVALS: 500
+    EVAL_INTERVALS: 1
+    IMAGE_INTERVALS: 500
+    SCALAR_INTERVALS: 50
+  WANDB:
+    ENABLED: false
+    PROJECT: VSRD-plus-plus
+    ENTITY: liuzihua1004
+    NAME: ""
+    TAGS: ""
+    LOG_IMAGES: false

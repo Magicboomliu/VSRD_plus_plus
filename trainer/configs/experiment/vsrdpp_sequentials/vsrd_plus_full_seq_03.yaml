@@ -1,0 +1,15 @@
+# VSRD++ full training — sequence_03
+defaults:
+  - ../../_defaults/train
+  - ../../_defaults/launch
+  - ../../_defaults/data
+  - ../../_defaults/model
+  - ../../_defaults/optim
+  - ../../_defaults/output
+  - _base_full
+
+TRAIN:
+  MODEL_TYPE: vsrd_plus_full_seq_03
+  DATASET:
+    FILENAMES:
+      - filenames/R50-N16-M128-B16/2013_05_28_drive_0003_sync/sampled_image_filenames.txt

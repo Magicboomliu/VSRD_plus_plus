@@ -1,0 +1,22 @@
+# (2) Vanilla VSRD：无 velocity，projection + silhouette，无 RDF
+defaults:
+  - ../../_defaults/train
+  - ../../_defaults/launch
+  - ../../_defaults/data
+  - ../../_defaults/model
+  - ../../_defaults/optim
+  - ../../_defaults/output
+  - _dataset_casual_ablation
+
+TRAIN:
+  MODEL_TYPE: ablation_02_vsrd_projection_silhouette
+  USE_DYNAMIC_MODELING: false
+  USE_DYNAMIC_MASK: false
+  USE_DYNAMIC_LABELS_FILE: false
+  USE_RDF_MODELING: false
+  OPTIMIZATION_RESIDUAL_BOX_STEPS: 100000
+  LOSS_WEIGHT:
+    L1_PROJECTION_LOSS: 1.0
+    IOU_PROJECTION_LOSS: 0.1
+    SILHOUETTE_LOSS: 1.0
+    EIKONAL_LOSS: 0.0

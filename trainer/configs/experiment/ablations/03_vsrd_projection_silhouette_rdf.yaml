@@ -1,0 +1,16 @@
+# (3) Vanilla VSRD + RDF：无 velocity，projection + silhouette，有 RDF
+defaults:
+  - ../../_defaults/train
+  - ../../_defaults/launch
+  - ../../_defaults/data
+  - ../../_defaults/model
+  - ../../_defaults/optim
+  - ../../_defaults/output
+  - _dataset_casual_ablation
+
+TRAIN:
+  MODEL_TYPE: ablation_03_vsrd_projection_silhouette_rdf
+  USE_DYNAMIC_MODELING: false
+  USE_DYNAMIC_MASK: false
+  USE_DYNAMIC_LABELS_FILE: false
+  USE_RDF_MODELING: true

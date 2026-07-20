@@ -1,3 +1,8 @@
+"""VSRD++ Stage-1 training — single entry point for all modes.
+
+Modes are selected via experiment YAML (TRAIN.*) and optional CLI:
+  --erode_ratio, --saved_ckpt_path, --skip_attribute_init
+"""
 import os
 import argparse
 
@@ -53,8 +58,16 @@ from vsrd_plus_plus import visualization
 
 from trainer.utils.box_geo import decode_box_3d,divide_into_n_parts,get_dynamic_mask_for_the_world_output,get_dynamic_sequentail_for_the_world_output
 from trainer.utils.file_io import read_text_lines,read_complex_strings
-from preprocessing.Initial_Attributes import estimate_initial_attributes, extract_initial_attributes
-from trainer.utils.wandb_utils import maybe_init_wandb, wandb_image, wandb_log_scalars
+from preprocessing.Initial_Attributes import (
+    InitialAttributesResult,
+    estimate_initial_attributes,
+    extract_initial_attributes,
+    infer_dynamic_mask_from_multi_inputs,
+)
+from trainer.mask_erode import MaskEroder
+from trainer.configs.train_modes import apply_train_runtime_overrides
+from trainer.utils.wandb_utils import maybe_init_wandb, wandb_image, wandb_log_scalars, build_wandb_config
+from trainer.utils.dynamic_labels import load_dynamic_labels_index, lookup_dynamic_mask
 import re
 
 import vsrd_plus_plus
@@ -111,10 +124,35 @@ def encode_orientation(rotation_matrices):
 
 
 
+def _apply_config_runtime_defaults(args, cfg) -> None:
+    """Fill runtime args from layered config when CLI omits them."""
+    if args.device_id is None:
+        launch = getattr(cfg, "LAUNCH", None)
+        args.device_id = int(getattr(launch, "DEVICE_ID", 0)) if launch else 0
+
+    wb = getattr(cfg.TRAIN, "WANDB", None)
+    if wb is not None:
+        if getattr(wb, "ENABLED", False):
+            args.wandb = True
+        if getattr(wb, "LOG_IMAGES", False):
+            args.wandb_log_images = True
+
+    train = cfg.TRAIN
+    if getattr(args, "erode_ratio", None) is None and getattr(train, "MASK_ERODE_RATIO", None):
+        args.erode_ratio = float(train.MASK_ERODE_RATIO)
+    if not getattr(args, "skip_attribute_init", False) and getattr(train, "SKIP_ATTRIBUTE_INIT", False):
+        args.skip_attribute_init = True
+
+
 def main(args=None):
     
     from trainer.configs import load_config
+    from trainer.configs.paths import resolve_output_roots
+
     my_conf_train = load_config(args.config_path)
+    _apply_config_runtime_defaults(args, my_conf_train)
+    train_mode = apply_train_runtime_overrides(my_conf_train, args)
+    wb_cfg = build_wandb_config(args, my_conf_train)
 
     wandb = None
     wandb_run = None
@@ -170,6 +208,10 @@ def main(args=None):
     _log_rank0(f"[data] dataset_root={dataset_root}")
     _log_rank0(f"[data] filenames_files={len(train_filename_list)} (txt/json entries)")
     _log_rank0(f"[data] batch_size={my_conf_train.TRAIN.DATASET.BATCH_SIZE} num_source_frames={num_source_frames} num_workers={num_of_workers}")
+    _log_rank0(
+        f"[mode] skip_attribute_init={train_mode.skip_init} "
+        f"mask_erode_ratio={train_mode.erode_ratio}"
+    )
 
     # Dataset Preprocessing
     target_transforms_resize_size = my_conf_train.TRAIN.DATASET.TARGET_TRANSFORMS.IMAGE_SIZE 
@@ -217,7 +259,11 @@ def main(args=None):
                            BoxGenerator(),
                            BoxSizeFilter(min_box_size=source_transforms_min_box_size),
                            SoftRasterizer()]
-
+    if train_mode.erode_ratio > 0.0:
+        eroder = MaskEroder(erode_ratio=train_mode.erode_ratio)
+        target_transforms.append(eroder)
+        source_transforms.append(eroder)
+        _log_rank0(f"[MaskEroder] enabled erode_ratio={train_mode.erode_ratio}")
 
     # ====================================================================================================
     # datasets
@@ -251,6 +297,17 @@ def main(args=None):
     DYNAMIC_TYPE = my_conf_train.TRAIN.DYNAMIC_MODELING_TYPE
     USE_RDF_MODELING_FLAG = my_conf_train.TRAIN.USE_RDF_MODELING
 
+    USE_DYNAMIC_LABELS_FILE_FLAG = bool(getattr(my_conf_train.TRAIN, "USE_DYNAMIC_LABELS_FILE", False))
+    dynamic_labels_index = None
+    if USE_DYNAMIC_LABELS_FILE_FLAG:
+        if not USE_DYNAMIC_MASK_FLAG:
+            raise ValueError("TRAIN.USE_DYNAMIC_LABELS_FILE requires USE_DYNAMIC_MASK=true")
+        dynamic_path = (getattr(my_conf_train.TRAIN, "DYNAMIC_LABELS_PATH", "") or "").strip()
+        if not dynamic_path:
+            raise ValueError("TRAIN.USE_DYNAMIC_LABELS_FILE requires TRAIN.DYNAMIC_LABELS_PATH")
+        dynamic_labels_index = load_dynamic_labels_index(dynamic_path, dataset_root)
+        _log_rank0(f"[dynamic] loaded {len(dynamic_labels_index)} frames from {dynamic_path}")
+
     
     def train():
         stop_watch.start()
@@ -283,22 +340,7 @@ def main(args=None):
             
 
             # Output Locations
-            if args.ckpt_dirname:
-                base_ckpt_dir = args.ckpt_dirname
-            else:
-                base_ckpt_dir = my_conf_train.TRAIN.CONFIG.replace(
-                    "configs", "ckpts/{}".format(my_conf_train.TRAIN.MODEL_TYPE)
-                )
-
-            if args.log_dirname:
-                base_log_dir = args.log_dirname
-            else:
-                base_log_dir = my_conf_train.TRAIN.CONFIG.replace("configs", "logs")
-
-            if args.out_dirname:
-                base_out_dir = args.out_dirname
-            else:
-                base_out_dir = my_conf_train.TRAIN.CONFIG.replace("configs", "outs")
+            base_ckpt_dir, base_log_dir, base_out_dir = resolve_output_roots(my_conf_train, args)
 
             ckpt_dirname = os.path.join(base_ckpt_dir, image_dirname)
             log_dirname = os.path.join(base_log_dir, image_dirname)
@@ -462,82 +504,84 @@ def main(args=None):
                 )
                 
             dynamic_mask_for_target_view = [False] * num_instances
-            if torch.distributed.get_rank() == 0:
-                print("[init] computing initial values ...", flush=True)
-            multi_inputs = estimate_initial_attributes(
-                multi_inputs=multi_inputs,
-                device=device_id,
-            )
-            init_attrs = extract_initial_attributes(multi_inputs, device=device_id)
-            if USE_DYNAMIC_MODELING_FLAG and USE_DYNAMIC_MASK_FLAG and init_attrs.is_dynamic is not None:
-                dynamic_mask_for_target_view = init_attrs.is_dynamic
+            if USE_DYNAMIC_MODELING_FLAG and USE_DYNAMIC_MASK_FLAG:
+                if dynamic_labels_index is not None:
+                    target_ids = target_inputs.instance_ids[0].cpu().numpy().tolist()
+                    dynamic_mask_for_target_view = lookup_dynamic_mask(
+                        image_filename,
+                        target_ids,
+                        dynamic_labels_index,
+                    )
+                elif train_mode.skip_init:
+                    dynamic_mask_for_target_view = infer_dynamic_mask_from_multi_inputs(multi_inputs)
 
-            # initialization
-            with torch.no_grad():
-                if init_attrs.roi_lidar_valid:
-                    loc_for_initial = encode_location(init_attrs.est_location)
-                    orient_for_initial = encode_orientation(init_attrs.est_orientation)
-                    models['detector'].velocity = torch.nn.Parameter(init_attrs.est_velocity)
-                    models['detector'].locations = torch.nn.Parameter(loc_for_initial)
-
-                    # initialization for dynamic objects
-                    for idx, dynamic_mask in enumerate(dynamic_mask_for_target_view):
-                        if dynamic_mask:
-                            if models['detector'].orientations.shape[1] == orient_for_initial.shape[1]:
-                                try:
-                                    models['detector'].orientations[:, idx, :] = torch.nn.Parameter(
-                                        orient_for_initial
-                                    )[:, idx, :]
-                                except Exception:
-                                    pass
-    
-            if torch.distributed.get_rank() == 0:
-                print(
-                    f"[init] completed, assigned as initial (roi_lidar_valid={bool(init_attrs.roi_lidar_valid)})",
-                    flush=True,
+            if train_mode.skip_init:
+                if torch.distributed.get_rank() == 0:
+                    print("[init] skipped attribute init (SKIP_ATTRIBUTE_INIT=true)", flush=True)
+                # No LiDAR/depth init: disable location/velocity supervision (roi_lidar_valid=False).
+                init_attrs = InitialAttributesResult(
+                    est_location=torch.zeros(1, num_instances, 3, device=device_id),
+                    est_velocity=torch.zeros(1, num_instances, 3, device=device_id),
+                    est_orientation=torch.zeros(1, num_instances, 2, device=device_id),
+                    roi_lidar_valid=False,
                 )
+            else:
+                if torch.distributed.get_rank() == 0:
+                    print("[init] computing initial values ...", flush=True)
+                multi_inputs = estimate_initial_attributes(
+                    multi_inputs=multi_inputs,
+                    device=device_id,
+                )
+                init_attrs = extract_initial_attributes(multi_inputs, device=device_id)
+                if (
+                    USE_DYNAMIC_MODELING_FLAG
+                    and USE_DYNAMIC_MASK_FLAG
+                    and dynamic_labels_index is None
+                    and init_attrs.is_dynamic is not None
+                ):
+                    dynamic_mask_for_target_view = init_attrs.is_dynamic
+
+                # initialization
+                with torch.no_grad():
+                    if init_attrs.roi_lidar_valid:
+                        loc_for_initial = encode_location(init_attrs.est_location)
+                        orient_for_initial = encode_orientation(init_attrs.est_orientation)
+                        models['detector'].velocity = torch.nn.Parameter(init_attrs.est_velocity)
+                        models['detector'].locations = torch.nn.Parameter(loc_for_initial)
+
+                        # initialization for dynamic objects
+                        for idx, dynamic_mask in enumerate(dynamic_mask_for_target_view):
+                            if dynamic_mask:
+                                if models['detector'].orientations.shape[1] == orient_for_initial.shape[1]:
+                                    try:
+                                        models['detector'].orientations[:, idx, :] = torch.nn.Parameter(
+                                            orient_for_initial
+                                        )[:, idx, :]
+                                    except Exception:
+                                        pass
+
+                if torch.distributed.get_rank() == 0:
+                    print(
+                        f"[init] completed, assigned as initial (roi_lidar_valid={bool(init_attrs.roi_lidar_valid)})",
+                        flush=True,
+                    )
             # ================================================================
             # optimizer
-            if USE_DYNAMIC_MODELING_FLAG and  DYNAMIC_TYPE=='mlp':
-                optimizer = optim.Adam([
-                    {'params': models.detector.locations, 'lr': 0.01},
-                    {'params': models.detector.dimensions, 'lr': 0.01},
-                    {'params': models.detector.orientations, 'lr': 0.01},
-                    {'params': models.detector.embeddings, 'lr': 0.001},
-                    {'params': models.detector_residual.parameters(),'lr':0.00005},
-                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
-                ], lr=0.01)  
-                
-            elif USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE=='vector_velocity':
-                optimizer = optim.Adam([
-                    {'params': models.detector.locations, 'lr': 0.01},
-                    {'params': models.detector.dimensions, 'lr': 0.01},
-                    {'params': models.detector.orientations, 'lr': 0.01},
-                    {'params': models.detector.embeddings, 'lr': 0.001},
-                    {'params': models.detector.velocity,'lr':0.005},
-                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
-                ], lr=0.01)
-                
-
-            
-            elif USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE=="scalar_velocity":
-                optimizer = optim.Adam([
-                    {'params': models.detector.locations, 'lr': 0.01},
-                    {'params': models.detector.dimensions, 'lr': 0.01},
-                    {'params': models.detector.orientations, 'lr': 0.01},
-                    {'params': models.detector.embeddings, 'lr': 0.001},
-                    {'params': models.detector.scalar_velocity,'lr':0.005},
-                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
-                ], lr=0.01) 
-            
-            else:
-                optimizer = optim.Adam([
-                    {'params': models.detector.locations, 'lr': 0.01},
-                    {'params': models.detector.dimensions, 'lr': 0.01},
-                    {'params': models.detector.orientations, 'lr': 0.01},
-                    {'params': models.detector.embeddings, 'lr': 0.001},
-                    {'params': models.hyper_distance_field.parameters(), 'lr': 0.0001}
-                ], lr=0.01) 
+            param_groups = [
+                {'params': models.detector.locations, 'lr': 0.01},
+                {'params': models.detector.dimensions, 'lr': 0.01},
+                {'params': models.detector.orientations, 'lr': 0.01},
+                {'params': models.detector.embeddings, 'lr': 0.001},
+            ]
+            if USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE == 'mlp':
+                param_groups.append({'params': models.detector_residual.parameters(), 'lr': 0.00005})
+            elif USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE == 'vector_velocity':
+                param_groups.append({'params': models.detector.velocity, 'lr': 0.005})
+            elif USE_DYNAMIC_MODELING_FLAG and DYNAMIC_TYPE == 'scalar_velocity':
+                param_groups.append({'params': models.detector.scalar_velocity, 'lr': 0.005})
+            if USE_RDF_MODELING_FLAG:
+                param_groups.append({'params': models.hyper_distance_field.parameters(), 'lr': 0.0001})
+            optimizer = optim.Adam(param_groups, lr=0.01)
 
 
             # ================================================================
@@ -1318,7 +1362,7 @@ def main(args=None):
                                 )
 
                                 # Optional: visualize PD vs GT 3D boxes on the target image
-                                if args.wandb_log_images and (
+                                if wb_cfg.log_images and (
                                     not (step + 1) % my_conf_train.TRAIN.LOGGING.IMAGE_INTERVALS
                                 ):
                                     try:
@@ -1532,8 +1576,7 @@ def parse_args():
         "--device_id",
         type=int,
         default=None,
-        required=True,
-        help="CUDA device index.")
+        help="CUDA device index (default: LAUNCH.DEVICE_ID in experiment config).")
 
     parser.add_argument(
         "--ckpt_dirname",
@@ -1563,6 +1606,24 @@ def parse_args():
         "--wandb_log_images",
         action="store_true",
         help="Log PD vs GT 3D box overlay images to wandb at IMAGE_INTERVALS.",
+    )
+
+    parser.add_argument(
+        "--erode_ratio",
+        type=float,
+        default=None,
+        help="Mask erode ratio (0=off). Overrides TRAIN.MASK_ERODE_RATIO in config.",
+    )
+    parser.add_argument(
+        "--skip_attribute_init",
+        action="store_true",
+        help="Skip depth/LiDAR attribute initialization.",
+    )
+    parser.add_argument(
+        "--saved_ckpt_path",
+        type=str,
+        default=None,
+        help="Unified output root (creates ckpts/logs/outs underneath).",
     )
 
     # get the local rank

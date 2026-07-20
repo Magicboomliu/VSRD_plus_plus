@@ -1,0 +1,28 @@
+# 默认层：data（被 experiment/*.yaml 通过 defaults: 引用）
+#
+# FILENAMES：字符串列表；每个元素是一个 sampled_image_filenames.txt（相对 ROOT 或绝对路径）。
+#   - 可写多个 txt，训练时会合并所有行（多 sequence / 多子集一起训）。
+#   - 每个 txt 内每行格式：instance_id  target_image_path  source_frame_indices
+# DYNAMIC_LABELS_PATH：仅 validator / 对比脚本用；训练不读此文件。
+#   - 留空时 load_config() 根据 FILENAMES[0] 自动推导（多 txt 时只取第一个）。
+# USE_DYNAMIC_LABELS_FILE：true 时 train.py 从 DYNAMIC_LABELS_PATH 读 dynamic/static。
+TRAIN:
+  DATASET:
+    ROOT: /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload
+    BATCH_SIZE: 1
+    FILENAMES: []  # 在 experiment yaml 里 override，例如 vsrdpp_sequentials/*.yaml
+    CLASS_NAMES: [car]
+    NUMS_OF_WORKERS: 4
+    NUM_SOURCE_FRAMES: 16
+    RECTIFICATION: true
+    TARGET_TRANSFORMS:
+      IMAGE_SIZE: [376, 1408]
+      MIN_MASK_AREA_01: 1
+      MIN_MASK_AREA_02: 128
+      MIN_BOX_SIZE: 16
+    SOURCE_TRANSFORMS:
+      IMAGE_SIZE: [376, 1408]
+      MIN_MASK_AREA_01: 1
+      MIN_MASK_AREA_02: 1
+      MIN_BOX_SIZE: 1
+  DYNAMIC_LABELS_PATH: ""  # 多 sequence 时请手动指定，或分 experiment 跑

@@ -1,0 +1,4 @@
+# VSRD++ 正式 full 训练共用（唯一入口 train.py；模式开关见 _defaults/train.yaml）
+TRAIN:
+  SKIP_ATTRIBUTE_INIT: false
+  MASK_ERODE_RATIO: 0.0

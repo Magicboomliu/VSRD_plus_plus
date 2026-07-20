@@ -20,24 +20,22 @@ from trainer.configs import load_config
 
 # All named configs that should be loadable
 ALL_CONFIGS = [
-    "sequence_00",
-    "sequence_02",
-    "sequence_03",
-    "sequence_04",
-    "sequence_05",
-    "sequence_06",
-    "sequence_07",
-    "sequence_09",
-    "sequence_10",
-    "ablation_full",
+    "vsrdpp_sequentials/vsrd_plus_full_seq_00",
+    "vsrdpp_sequentials/vsrd_plus_full_seq_02",
+    "vsrdpp_sequentials/vsrd_plus_full_seq_03",
+    "vsrdpp_sequentials/vsrd_plus_full_seq_04",
+    "vsrdpp_sequentials/vsrd_plus_full_seq_05",
+    "vsrdpp_sequentials/vsrd_plus_full_seq_06",
+    "vsrdpp_sequentials/vsrd_plus_full_seq_07",
+    "vsrdpp_sequentials/vsrd_plus_full_seq_09",
+    "vsrdpp_sequentials/vsrd_plus_full_seq_10",
+    "ablations/erode_seg_mask_degradation_vsrdpp",
     "debug",
     "smoke",
     "inference",
 ]
 
-# Configs that have a real FILENAMES file on disk (ablation_selective skipped if
-# its data doesn't exist yet)
-SEQUENCE_CONFIGS = [c for c in ALL_CONFIGS if c.startswith("sequence_")]
+SEQUENCE_CONFIGS = [c for c in ALL_CONFIGS if "/vsrd_plus_full_seq_" in c]
 
 
 def _filenames_exist(name: str) -> bool:

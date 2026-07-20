@@ -1,0 +1,13 @@
+# Mask 腐蚀鲁棒性：完整 VSRD++ + TRAIN.MASK_ERODE_RATIO（train.py 统一入口）
+defaults:
+  - ../../_defaults/train
+  - ../../_defaults/launch
+  - ../../_defaults/data
+  - ../../_defaults/model
+  - ../../_defaults/optim
+  - ../../_defaults/output
+  - 05_vsrdpp_full
+
+TRAIN:
+  MODEL_TYPE: erode_seg_mask_degradation_vsrdpp
+  MASK_ERODE_RATIO: 0.03

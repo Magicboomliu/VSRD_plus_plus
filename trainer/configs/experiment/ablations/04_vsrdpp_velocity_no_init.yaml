@@ -1,0 +1,23 @@
+# (4) VSRD++：有 velocity + RDF + silhouette + projection，无 attribute init
+defaults:
+  - ../../_defaults/train
+  - ../../_defaults/launch
+  - ../../_defaults/data
+  - ../../_defaults/model
+  - ../../_defaults/optim
+  - ../../_defaults/output
+  - _dataset_casual_ablation
+
+LAUNCH:
+  CUDA_DEVICES: "0,1"
+  NPROC_PER_NODE: 2
+  RDZV_ENDPOINT: localhost:29501
+
+TRAIN:
+  SKIP_ATTRIBUTE_INIT: true
+  MODEL_TYPE: ablation_04_vsrdpp_velocity_no_init
+  USE_DYNAMIC_MODELING: true
+  USE_DYNAMIC_MASK: true
+  USE_DYNAMIC_LABELS_FILE: true
+  DYNAMIC_MODELING_TYPE: vector_velocity
+  USE_RDF_MODELING: true

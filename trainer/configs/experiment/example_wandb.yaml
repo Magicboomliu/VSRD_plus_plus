@@ -1,0 +1,54 @@
+# wandb + 输出路径 调试模板（复制后改文件名即可当自己的 debug experiment）
+#
+# 用法：pixi run bash trainer/scripts/train.sh example_wandb
+# 模式开关（见 _defaults/train.yaml）：
+#   SKIP_ATTRIBUTE_INIT / MASK_ERODE_RATIO
+# CLI 可覆盖：--skip_attribute_init --erode_ratio --saved_ckpt_path
+
+defaults:
+  - ../_defaults/train
+  - ../_defaults/launch
+  - ../_defaults/data
+  - ../_defaults/model
+  - ../_defaults/optim
+  - ../_defaults/output
+
+# ── 运行环境 ─────────────────────────────────────────────────────────────
+LAUNCH:
+  DEVICE_ID: 0
+  CUDA_DEVICES: "0"
+  NPROC_PER_NODE: 1
+  RDZV_ENDPOINT: localhost:22500
+
+TRAIN:
+  # ── 数据（小集合适合 debug）────────────────────────────────────────────
+  DATASET:
+    # ROOT: /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload  # 换机器时取消注释
+    FILENAMES:
+      - filenames/R50-N16-M128-B16/2013_05_28_drive_0010_sync/sampled_image_filenames.txt
+      # - filenames/R50-N16-M128-B16/2013_05_28_drive_0007_sync/sampled_image_filenames.txt
+
+  # 单独 ckpt 目录名（OUTPUT 留空时才用）；这里已指定 OUTPUT，可不改
+  MODEL_TYPE: example_wandb_debug
+
+  # ── 输出路径（留空则用 trainer/ckpts|logs|outs）──────────────────────
+  OUTPUT:
+    CKPT_ROOT: /media/zliu/data12/IJCV/vsrdpp/ckpts
+    LOG_ROOT: /media/zliu/data12/IJCV/vsrdpp/logs
+    OUT_ROOT: /media/zliu/data12/IJCV/vsrdpp/outs
+
+  # ── TensorBoard / 本地日志频率 ─────────────────────────────────────────
+  LOGGING:
+    CKPT_INTERVALS: 500
+    EVAL_INTERVALS: 1
+    IMAGE_INTERVALS: 500   # 与 WANDB.LOG_IMAGES 对齐：每 N step 记 viz
+    SCALAR_INTERVALS: 50
+
+  # ── Weights & Biases（ENABLED=true 时无需再传 --wandb）────────────────
+  WANDB:
+    ENABLED: true
+    PROJECT: VSRD-plus-plus
+    ENTITY: liuzihua1004
+    NAME: seq10-wandb-debug
+    TAGS: debug,example,seq10
+    LOG_IMAGES: true       # viz/gt_3d, viz/pd_bev, viz/gt_mask_full 等

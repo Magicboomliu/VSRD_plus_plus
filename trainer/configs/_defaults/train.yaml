@@ -1,0 +1,8 @@
+# train.py 运行时模式（由 experiment 覆盖；CLI 可再覆盖）
+TRAIN:
+  # true → 跳过 estimate_initial_attributes（等同 --skip_attribute_init）
+  SKIP_ATTRIBUTE_INIT: false
+  # >0 → 训练前腐蚀 2D mask（等同 --erode_ratio）
+  MASK_ERODE_RATIO: 0.0
+  # true → 从 DYNAMIC_LABELS_PATH 读 dynamic/static（否则在线 GT velocity 推断）
+  USE_DYNAMIC_LABELS_FILE: false

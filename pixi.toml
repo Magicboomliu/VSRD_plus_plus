@@ -74,9 +74,7 @@ gen-dynamic = "bash preprocessing/scripts/generate_dynamic_labels.sh"
 
 # --- Stage 1: Optimization-based autolabeling ---
 train      = "python trainer/train.py"
-train-no-init = "python trainer/train_no_init.py"
-train-ablation = "python trainer/train_ablation.py"
+train-no-init = "bash trainer/scripts/train.sh no_init"
 infer      = "python trainer/inference.py"
 evaluate   = "python trainer/evaluation.py"
 train-shell = "bash trainer/scripts/train.sh"
-train-smoke = "bash trainer/scripts/train_smoke.sh"

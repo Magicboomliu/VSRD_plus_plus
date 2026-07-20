@@ -1,0 +1,14 @@
+# Casual Split ablation 数据（seq03 + seq07 合并；论文 Table I ablation ladder）
+#
+# 磁盘路径（相对 DATASET.ROOT）：
+#   filenames/ablations/train_ablation_filenames.txt
+#   filenames/ablations/train_ablation_dynamic_mask.txt
+#
+# 生成 / 路径规范化：
+#   python preprocessing/data_organization/normalize_ablation_filenames.py --root $VSRD_DATASET_ROOT
+TRAIN:
+  DATASET:
+    FILENAMES:
+      - filenames/ablations/train_ablation_filenames.txt
+  # 路径供 04/05（USE_DYNAMIC_MASK=true）使用；01~03 请在 experiment yaml 里保持 USE_DYNAMIC_LABELS_FILE: false
+  DYNAMIC_LABELS_PATH: filenames/ablations/train_ablation_dynamic_mask.txt

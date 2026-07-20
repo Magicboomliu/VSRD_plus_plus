@@ -42,17 +42,18 @@ def _safe_import_wandb():
     return wandb
 
 
-def build_wandb_config(args: Any) -> WandbConfig:
+def build_wandb_config(args: Any, cfg: Any = None) -> WandbConfig:
+    wb = getattr(getattr(cfg, "TRAIN", None), "WANDB", None) if cfg is not None else None
+
     enabled = bool(getattr(args, "wandb", False))
-    # NOTE:
-    # wandb "entity" and "project" are separate fields.
-    # project name cannot contain "/" (or other special chars); "entity/project" is a common mistake.
+    if not enabled and wb is not None:
+        enabled = bool(getattr(wb, "ENABLED", False))
+
     project_raw = getattr(args, "wandb_project", None) or None
     entity_raw = getattr(args, "wandb_entity", None) or None
 
-    # Reasonable defaults (overridable via CLI or env -> scripts/lib.sh)
-    project = project_raw or "VSRD-plus-plus"
-    entity = entity_raw or "liuzihua1004"
+    project = project_raw or (getattr(wb, "PROJECT", None) if wb else None) or "VSRD-plus-plus"
+    entity = entity_raw or (getattr(wb, "ENTITY", None) if wb else None) or "liuzihua1004"
 
     # Backward/robust: if user provided "entity/project" in wandb_project, split it.
     if project_raw and "/" in project_raw and not entity_raw:
@@ -62,6 +63,9 @@ def build_wandb_config(args: Any) -> WandbConfig:
             project = maybe_project
 
     name = getattr(args, "wandb_name", None) or None
+    if not name and wb is not None:
+        cfg_name = getattr(wb, "NAME", "") or ""
+        name = cfg_name or None
     if not name:
         # Default to a readable, unique-ish name (user can override via --wandb_name / WANDB_NAME)
         # Example: ablation_selective-megumi-20260702-160512
@@ -70,8 +74,12 @@ def build_wandb_config(args: Any) -> WandbConfig:
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         name = f"{cfg_name}-{host}-{ts}"
     tags_raw = getattr(args, "wandb_tags", "") or ""
+    if not tags_raw and wb is not None:
+        tags_raw = getattr(wb, "TAGS", "") or ""
     tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
     log_images = bool(getattr(args, "wandb_log_images", False))
+    if not log_images and wb is not None:
+        log_images = bool(getattr(wb, "LOG_IMAGES", False))
     return WandbConfig(
         enabled=enabled,
         project=project,
@@ -93,7 +101,7 @@ def maybe_init_wandb(
     Initialize wandb only on rank 0.
     Returns (wandb_module, run) or (None, None) when disabled.
     """
-    wb_cfg = build_wandb_config(args)
+    wb_cfg = build_wandb_config(args, cfg)
     if (not wb_cfg.enabled) or rank != 0:
         return None, None
 

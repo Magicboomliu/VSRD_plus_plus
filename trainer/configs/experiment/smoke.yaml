@@ -1,0 +1,15 @@
+# 快速 smoke test（seq00；超参与正式 full 训练一致，可用短 FILENAMES 列表加速）
+defaults:
+  - ../_defaults/train
+  - ../_defaults/launch
+  - ../_defaults/data
+  - ../_defaults/model
+  - ../_defaults/optim
+  - ../_defaults/output
+  - vsrdpp_sequentials/_base_full
+
+TRAIN:
+  MODEL_TYPE: smoke
+  DATASET:
+    FILENAMES:
+      - filenames/R50-N16-M128-B16/2013_05_28_drive_0000_sync/sampled_image_filenames.txt

@@ -1,0 +1,6 @@
+# 默认层：GPU 启动参数（训练入口固定为 trainer/train.py）
+LAUNCH:
+  DEVICE_ID: 0
+  CUDA_DEVICES: "0"
+  NPROC_PER_NODE: 1
+  RDZV_ENDPOINT: localhost:22500
