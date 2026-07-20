@@ -71,12 +71,12 @@ def test_ablation_ladder_configs():
 
     casual = load_config("vsrd_projection_only")
     assert casual.TRAIN.DATASET.FILENAMES[0].endswith(
-        "filenames/ablations/train_ablation_filenames.txt"
+        "filenames/ablations_small/train_ablation_filenames.txt"
     )
     assert casual.TRAIN.DYNAMIC_LABELS_PATH.endswith(
-        "filenames/ablations/train_ablation_dynamic_mask.txt"
+        "filenames/ablations_small/train_ablation_dynamic_mask.txt"
     )
-    assert casual.TRAIN.USE_DYNAMIC_LABELS_FILE is True
+    assert casual.TRAIN.USE_DYNAMIC_LABELS_FILE is False
 
 
 def test_ablation_name_aliases():

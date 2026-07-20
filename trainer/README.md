@@ -33,10 +33,24 @@ pixi run test-data
 
 | Script | When to use |
 |--------|-------------|
-| **`train.py`** | Standard training (recommended): pseudo-depth init + online dynamic/static |
-| **`train_no_init.py`** | Ablation: skip `estimate_initial_attributes()` (no depth/LiDAR init) |
-| **`train_ablation.py`** | Ablation: mask erode via `--erode_ratio` (robustness to noisy masks) |
+| **`train.py`** | Standard training and **all ablation modes** (recommended single entry) |
 | **`train_sharded.py`** | 64-way data split for cluster jobs (`SPLITS64/sub_XX`) |
+
+Legacy split scripts (`train_no_init.py`, `train_ablation.py`) are merged into `train.py`; use YAML flags (`SKIP_ATTRIBUTE_INIT`, `MASK_ERODE_RATIO`) or CLI (`--skip_attribute_init`, `--erode_ratio`).
+
+### Paper ablation ladder (Table I)
+
+Five studies (projection → silhouette → RDF → VSRD++ no-init → VSRD++ full) share **`train.py`**; switch via **`trainer/scripts/ablation.sh`**.
+
+**Full doc:** [configs/experiment/ablations/README.md](configs/experiment/ablations/README.md)
+
+```bash
+# Edit STUDY= in ablation.sh, or pass on CLI:
+bash trainer/scripts/ablation.sh ablations/vsrdpp_full
+bash trainer/scripts/ablation.sh vsrd_projection_only
+```
+
+Outputs default to `SAVED_ROOT_PATH` (see ablation README). wandb run name follows `STUDY` unless `WANDB_USE_ENV_NAME=1`.
 
 ### Standard training (single GPU)
 
@@ -97,14 +111,14 @@ cd trainer/scripts && sh train_smoke.sh
 
 Optional env vars: `CKPT_DIRNAME`, `LOG_DIRNAME`, `OUT_DIRNAME`, `CONFIG_PATH`, `CUDA_VISIBLE_DEVICES`.
 
-### Ablation examples
+### Other ablation examples
 
 ```bash
-# Without attribute initialization
-pixi run train-no-init -- --config_path sequence_07 --device_id 0
+# Skip attribute init (any config with SKIP_ATTRIBUTE_INIT or CLI)
+pixi run train -- --config_path ablations/vsrdpp_velocity_no_init --device_id 0
 
-# Mask erode (5%)
-pixi run train-ablation -- --config_path ablation_selective --device_id 0 --erode_ratio 0.05
+# Mask erode robustness (full VSRD++ + eroded masks)
+ERODE_RATIO=0.03 bash trainer/scripts/train_enrode_mask.sh
 ```
 
 ### Sharded training (cluster)
@@ -122,14 +136,16 @@ Uses `configs/SPLITS64/split_sub.json` and `train_tsubame_filenames/filename_spl
 
 | Script | Purpose |
 |--------|---------|
-| `train.sh` | Launch `train.py` or `train_no_init.py` (`MODE=no_init` for ablation) |
+| **`ablation.sh`** | **Table I ablation ladder** → `launch_train.py` + study yaml |
+| `launch_train.py` | torchrun launcher (used by `ablation.sh`, `train.sh`, …) |
+| `train.sh` | Generic launcher → `launch_train.py` |
+| `train_enrode_mask.sh` | Mask erode ablation → `train.py` + `--erode_ratio` |
 | `train_smoke.sh` | Single-GPU smoke test |
-| `train_ablation.sh` | `train_ablation.py` + `ERODE_RATIO` env var |
 | `train_sharded.sh` | `train_sharded.py` |
 | `train_tsubame.sh` | Tsubame cluster job template |
-| `lib.sh` | Shared launcher (`ensure_pixi`, `run_train_job`, wandb flags) |
+| `lib.sh` | Shared helpers (`ensure_pixi`, wandb flags, …) |
 
-Pixi shortcuts: `pixi run train-shell`, `pixi run train-smoke`.
+Pixi: `pixi run train`, `pixi run train-smoke`, etc.
 
 **wandb via shell env** (handled by `lib.sh`):
 
@@ -176,56 +192,41 @@ Tip: you may also run `bash trainer/scripts/train.sh` directly — the script wi
 
 ## Configuration
 
-JSON configs under `trainer/configs/`:
+Experiment configs under `trainer/configs/experiment/` (Hydra-style YAML layers):
 
 ```
 configs/
-├── base.json              # defaults + DATASET.ROOT (edit first)
-├── sequence_XX.json       # one KITTI360 sequence per file
-├── smoke.json             # smoke test (short FILENAMES recommended)
-├── ablation_selective.json
-├── ablation_full.json
-├── inference.json
-└── SPLITS64/split_sub.json
-```
-
-Example `sequence_07.json` — only `FILENAMES` is required:
-
-```json
-{
-  "TRAIN": {
-    "DATASET": {
-      "FILENAMES": [
-        "filenames/R50-N16-M128-B16/2013_05_28_drive_0007_sync/sampled_image_filenames.txt"
-      ]
-    }
-  }
-}
-```
-
-`load_config("sequence_07")` auto-derives `DYNAMIC_LABELS_PATH` for validator/compare scripts only.
-
-Key flags in `base.json`:
-
-```json
-{
-  "TRAIN": {
-    "MODEL_TYPE": "with_pseudo_depth_ssl_igevstereo",
-    "USE_RDF_MODELING": true,
-    "USE_DYNAMIC_MASK": true,
-    "USE_DYNAMIC_MODELING": true,
-    "DYNAMIC_MODELING_TYPE": "vector_velocity",
-    "OPTIMIZATION_NUM_STEPS": 3000
-  }
-}
+├── _defaults/           # train, data, model, optim, output, launch
+├── experiment/
+│   ├── ablations/       # Table I ladder — see ablations/README.md
+│   ├── vsrdpp_sequentials/
+│   ├── smoke.yaml
+│   └── inference.yaml
+└── paths.py, train_modes.py, …
 ```
 
 Load in Python:
 
 ```python
 from trainer.configs import load_config
-cfg = load_config("07")
+cfg = load_config("ablations/vsrdpp_full")   # or "05", sequence id, etc.
 ```
+
+Set `TRAIN.DATASET.ROOT` in `_defaults/data.yaml` or per-experiment override.
+
+Key flags (see `_defaults/model.yaml`, per-ablation yaml):
+
+```yaml
+TRAIN:
+  USE_RDF_MODELING: true
+  USE_DYNAMIC_MASK: true
+  USE_DYNAMIC_MODELING: true
+  DYNAMIC_MODELING_TYPE: vector_velocity
+  SKIP_ATTRIBUTE_INIT: false
+  OPTIMIZATION_NUM_STEPS: 3000
+```
+
+Legacy JSON configs may still exist for older workflows; new runs should use `experiment/*.yaml`.
 
 Path constants: [preprocessing/dataset_paths.py](../preprocessing/dataset_paths.py).
 

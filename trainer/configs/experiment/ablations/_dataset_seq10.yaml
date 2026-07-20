@@ -1,8 +1,0 @@
-# ablation 共用数据（可给 01~05 通过 defaults: _dataset_seq10 引用）
-#
-# FILENAMES 是 list，可追加多个 txt，例如再写 seq07：
-#   - filenames/.../2013_05_28_drive_0007_sync/sampled_image_filenames.txt
-TRAIN:
-  DATASET:
-    FILENAMES:
-      - filenames/R50-N16-M128-B16/2013_05_28_drive_0010_sync/sampled_image_filenames.txt
