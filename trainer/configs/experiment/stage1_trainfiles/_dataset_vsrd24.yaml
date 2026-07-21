@@ -1,0 +1,12 @@
+# Stage1 VSRD24 split（vsrd24_splits；6901 帧，seq00/02/04/05/06/09，不含 03/07/10）
+#
+# 列表文件（绝对路径，不在 DATASET.ROOT 下）：
+#   /media/zliu/data12/IJCV/ablations/filenames/vsrd24_splits/train_all_filenames.txt
+#   /media/zliu/data12/IJCV/ablations/filenames/vsrd24_splits/train_all_dynamic_mask.txt
+#
+# 来源：filenames/R50-N16-M128-B16 + dynamic_attributes_est_gt
+TRAIN:
+  DATASET:
+    FILENAMES:
+      - /media/zliu/data12/IJCV/ablations/filenames/vsrd24_splits/train_all_filenames.txt
+  DYNAMIC_LABELS_PATH: /media/zliu/data12/IJCV/ablations/filenames/vsrd24_splits/train_all_dynamic_mask.txt

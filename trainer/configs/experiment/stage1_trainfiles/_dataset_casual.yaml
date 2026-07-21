@@ -1,0 +1,12 @@
+# Stage1 Casual split（cascual_splits；4143 帧，seq00/02/03/04/05/06/07/09）
+#
+# 列表文件（绝对路径，不在 DATASET.ROOT 下）：
+#   /media/zliu/data12/IJCV/ablations/filenames/cascual_splits/train_all_filenames.txt
+#   /media/zliu/data12/IJCV/ablations/filenames/cascual_splits/train_all_dynamic_mask.txt
+#
+# txt 内图像路径为相对 DATASET.ROOT 的 data_2d_raw/...
+TRAIN:
+  DATASET:
+    FILENAMES:
+      - /media/zliu/data12/IJCV/ablations/filenames/cascual_splits/train_all_filenames.txt
+  DYNAMIC_LABELS_PATH: /media/zliu/data12/IJCV/ablations/filenames/cascual_splits/train_all_dynamic_mask.txt

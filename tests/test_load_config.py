@@ -71,12 +71,42 @@ def test_ablation_ladder_configs():
 
     casual = load_config("vsrd_projection_only")
     assert casual.TRAIN.DATASET.FILENAMES[0].endswith(
-        "filenames/ablations_small/train_ablation_filenames.txt"
+        "filenames/cascual_splits/train_all_filenames.txt"
     )
     assert casual.TRAIN.DYNAMIC_LABELS_PATH.endswith(
-        "filenames/ablations_small/train_ablation_dynamic_mask.txt"
+        "filenames/cascual_splits/train_all_dynamic_mask.txt"
     )
     assert casual.TRAIN.USE_DYNAMIC_LABELS_FILE is False
+
+
+def test_stage1_trainfile_dataset_configs():
+    casual = load_config("stage1_trainfiles/_dataset_casual")
+    vsrd24 = load_config("stage1_trainfiles/_dataset_vsrd24")
+    assert casual.TRAIN.DATASET.FILENAMES[0].endswith(
+        "filenames/cascual_splits/train_all_filenames.txt"
+    )
+    assert vsrd24.TRAIN.DATASET.FILENAMES[0].endswith(
+        "filenames/vsrd24_splits/train_all_filenames.txt"
+    )
+    assert casual.TRAIN.DYNAMIC_LABELS_PATH.endswith(
+        "filenames/cascual_splits/train_all_dynamic_mask.txt"
+    )
+    assert vsrd24.TRAIN.DYNAMIC_LABELS_PATH.endswith(
+        "filenames/vsrd24_splits/train_all_dynamic_mask.txt"
+    )
+
+
+def test_stage1_vsrdpp_full_train_configs():
+    casual = load_config("stage1_trainfiles/vsrdpp_full_casual")
+    vsrd24 = load_config("stage1_trainfiles/vsrdpp_full_vsrd24")
+    assert casual.TRAIN.MODEL_TYPE == "vsrdpp_full_casual"
+    assert vsrd24.TRAIN.MODEL_TYPE == "vsrdpp_full_vsrd24"
+    assert casual.TRAIN.USE_DYNAMIC_LABELS_FILE is True
+    assert vsrd24.TRAIN.USE_DYNAMIC_LABELS_FILE is True
+    assert casual.TRAIN.USE_RDF_MODELING is True
+    assert vsrd24.TRAIN.USE_DYNAMIC_MODELING is True
+    assert casual.TRAIN.DATASET.FILENAMES[0].endswith("cascual_splits/train_all_filenames.txt")
+    assert vsrd24.TRAIN.DATASET.FILENAMES[0].endswith("vsrd24_splits/train_all_filenames.txt")
 
 
 def test_ablation_name_aliases():

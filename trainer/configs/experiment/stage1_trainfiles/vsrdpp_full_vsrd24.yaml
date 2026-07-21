@@ -1,0 +1,13 @@
+# VSRD++ Full — Stage1 VSRD24 split（6901 帧，vsrd24_splits）
+defaults:
+  - ../../_defaults/train
+  - ../../_defaults/launch
+  - ../../_defaults/data
+  - ../../_defaults/model
+  - ../../_defaults/optim
+  - ../../_defaults/output
+  - _dataset_vsrd24
+
+TRAIN:
+  MODEL_TYPE: vsrdpp_full_vsrd24
+  USE_DYNAMIC_LABELS_FILE: true

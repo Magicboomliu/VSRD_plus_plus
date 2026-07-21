@@ -1,12 +1,12 @@
-# Stage 1: Multi-View 3D Auto-Labeling (VSRD++)
+# Stage 1：多视角 3D 自动标注（VSRD++）
 
-Optimization-based scene-wise multi-view 3D bounding box rendering with dynamic object modeling.
+基于优化的 scene-wise 多视角 3D 包围盒渲染，支持动态物体建模。
 
-Dynamic modeling options (set `DYNAMIC_MODELING_TYPE` in `configs/base.json`):
+动态建模方式（在配置里设 `DYNAMIC_MODELING_TYPE`）：
 
-- **MLP** — instance residual field
-- **vector_velocity** — 3D velocity vector (default)
-- **scalar_velocity** — scalar speed
+- **MLP** — 实例残差场
+- **vector_velocity** — 3D 速度向量（默认）
+- **scalar_velocity** — 标量速度
 
 [Slides](https://docs.google.com/presentation/d/1B2l-yRS63q4lu8Qb-4qCMdWHLMMMLU5L/edit?usp=sharing&ouid=112605403951022205460&rtpof=true&sd=true)
 
@@ -15,13 +15,13 @@ Dynamic modeling options (set `DYNAMIC_MODELING_TYPE` in `configs/base.json`):
 
 ---
 
-## Prerequisites
+## 环境准备
 
-1. Set `TRAIN.DATASET.ROOT` in `configs/base.json` to your KITTI360 root.
-2. Generate **WAFT pseudo depth** under `pseudo_depth_ssl_waft_stereo/` (required for attribute initialization in `train.py`).
-3. **Do not** need `dynamic_mask.txt` for training — dynamic/static is inferred online from GT 3D bbox velocity (`||v|| >= 0.20 m/frame`, same rule as [preprocessing/Dynamic_Labels](../preprocessing/Dynamic_Labels/)).
+1. 在 `configs/_defaults/data.yaml`（或 experiment yaml）里设置 `TRAIN.DATASET.ROOT` 为你的 KITTI360 根目录。
+2. 生成 **WAFT pseudo depth**（路径 `pseudo_depth_ssl_waft_stereo/`，`train.py` 做 attribute init 时需要）。
+3. 训练**不强制**依赖 `dynamic_mask.txt` — 默认在线用 GT 3D bbox 速度推断 dynamic/static（`||v|| >= 0.20 m/frame`，规则见 [preprocessing/Dynamic_Labels](../preprocessing/Dynamic_Labels/)）。
 
-Verify paths from repo root:
+在仓库根目录检查数据路径：
 
 ```bash
 pixi run test-data
@@ -29,30 +29,46 @@ pixi run test-data
 
 ---
 
-## Training scripts
+## 训练入口
 
-| Script | When to use |
-|--------|-------------|
-| **`train.py`** | Standard training and **all ablation modes** (recommended single entry) |
-| **`train_sharded.py`** | 64-way data split for cluster jobs (`SPLITS64/sub_XX`) |
+| 脚本 | 用途 |
+|------|------|
+| **`train.py`** | 标准训练 + **所有 ablation 模式**（推荐唯一 Python 入口） |
+| **`train_sharded.py`** | 64 分片集群训练（`SPLITS64/sub_XX`） |
 
-Legacy split scripts (`train_no_init.py`, `train_ablation.py`) are merged into `train.py`; use YAML flags (`SKIP_ATTRIBUTE_INIT`, `MASK_ERODE_RATIO`) or CLI (`--skip_attribute_init`, `--erode_ratio`).
+旧脚本 `train_no_init.py`、`train_ablation.py` 已合并进 `train.py`；用 YAML（`SKIP_ATTRIBUTE_INIT`、`MASK_ERODE_RATIO`）或 CLI（`--skip_attribute_init`、`--erode_ratio`）切换行为。
 
-### Paper ablation ladder (Table I)
+### 论文 Ablation Ladder（Table I）
 
-Five studies (projection → silhouette → RDF → VSRD++ no-init → VSRD++ full) share **`train.py`**; switch via **`trainer/scripts/ablation.sh`**.
+五个 study（projection → silhouette → RDF → VSRD++ 无 init → VSRD++ full）共用 **`train.py`**，通过 **`trainer/scripts/ablation.sh`** 切换。
 
-**Full doc:** [configs/experiment/ablations/README.md](configs/experiment/ablations/README.md)
+**详细文档：** [configs/experiment/ablations/README.md](configs/experiment/ablations/README.md)
 
 ```bash
-# Edit STUDY= in ablation.sh, or pass on CLI:
+# 改 ablation.sh 里的 STUDY=，或命令行指定：
 bash trainer/scripts/ablation.sh ablations/vsrdpp_full
 bash trainer/scripts/ablation.sh vsrd_projection_only
 ```
 
-Outputs default to `SAVED_ROOT_PATH` (see ablation README). wandb run name follows `STUDY` unless `WANDB_USE_ENV_NAME=1`.
+输出默认在 `SAVED_ROOT_PATH` 下（见 ablation README）。wandb run name 默认跟随 `STUDY`，除非设 `WANDB_USE_ENV_NAME=1`。
 
-### Standard training (single GPU)
+### Stage1 全量训练（Casual / VSRD24）
+
+两套 **VSRD++ full** 配置，模型相同，**帧列表不同**，通过 **`trainer/scripts/train.sh`** 切换。
+
+**详细文档：** [configs/experiment/stage1_trainfiles/README.md](configs/experiment/stage1_trainfiles/README.md)
+
+```bash
+bash trainer/scripts/train.sh                  # 默认 vsrdpp_casual（4143 帧）
+bash trainer/scripts/train.sh vsrdpp_vsrd24    # VSRD24（6901 帧）
+```
+
+| STUDY | 数据 | 输出（在 `SAVED_ROOT_PATH` 下） |
+|-------|------|-----------------------------------|
+| `vsrdpp_casual` | `cascual_splits` | `vsrdpp_casual/` |
+| `vsrdpp_vsrd24` | `vsrd24_splits` | `vsrdpp_vsrd24/` |
+
+### 单 sequence 训练（单卡）
 
 ```bash
 cd trainer
@@ -62,31 +78,26 @@ CUDA_VISIBLE_DEVICES=0 torchrun \
   train.py --config_path sequence_07 --device_id 0
 ```
 
-### Weights & Biases (optional)
+### Weights & Biases（可选）
 
-Enable wandb logging (losses/metrics; optional PD-vs-GT 3D box overlays):
+记录 loss/metric；可选上传 PD vs GT 3D box 可视化。
 
-Recommended: set your `WANDB_API_KEY` locally via `.env` (never commit):
+建议在仓库根目录用 `.env` 配置 `WANDB_API_KEY`（勿提交）：
 
 ```bash
-cd /home/zliu/IJCV/VSRD_plus_plus
+cd /path/to/VSRD_plus_plus
 cp .env.sample .env
-# edit .env and set WANDB_API_KEY=...
+# 编辑 .env，设置 WANDB_API_KEY=...
 ```
 
 ```bash
-pixi run train -- --config_path sequence_07 --device_id 0 --wandb --wandb_entity "liuzihua1004" --wandb_project "VSRD-plus-plus" --wandb_log_images
+pixi run train -- --config_path sequence_07 --device_id 0 \
+  --wandb --wandb_entity "your_entity" --wandb_project "VSRD++" --wandb_log_images
 ```
 
-From repo root:
+`--config_path` 支持 `sequence_07`、简写 `07`、`smoke`、`ablations/vsrdpp_full` 等。
 
-```bash
-pixi run train -- --config_path sequence_07 --device_id 0
-```
-
-`--config_path` accepts `sequence_07`, bare id `07`, `smoke`, `ablation_selective`, etc.
-
-### Custom output directories
+### 自定义输出目录
 
 ```bash
 train.py \
@@ -97,124 +108,123 @@ train.py \
   --out_dirname  /path/to/outs
 ```
 
-Default (when flags omitted): `trainer/ckpts/{MODEL_TYPE}/`, `trainer/logs/`, `trainer/outs/` — each frame gets a subfolder under the dataset-relative image path.
+未指定时默认：`trainer/ckpts/{MODEL_TYPE}/`、`trainer/logs/`、`trainer/outs/`，每帧再按数据集相对图像路径分子目录。
 
-### Smoke test
+### Smoke 测试
 
-Same code path as `train.py`, config `smoke.json` (sequence_00 by default). Hyperparameters come from `base.json`; use a **short** `FILENAMES` list for a quick run.
+与 `train.py` 同一代码路径，配置 `smoke`（默认 seq00）。超参与正式训练一致；可用**短** `FILENAMES` 列表快速跑通。
 
 ```bash
 pixi run train-smoke
-# or
-cd trainer/scripts && sh train_smoke.sh
+# 或
+cd trainer/scripts && bash train_smoke.sh
 ```
 
-Optional env vars: `CKPT_DIRNAME`, `LOG_DIRNAME`, `OUT_DIRNAME`, `CONFIG_PATH`, `CUDA_VISIBLE_DEVICES`.
+可选环境变量：`CKPT_DIRNAME`、`LOG_DIRNAME`、`OUT_DIRNAME`、`CONFIG_PATH`、`CUDA_VISIBLE_DEVICES`。
 
-### Other ablation examples
+### 其他 ablation 示例
 
 ```bash
-# Skip attribute init (any config with SKIP_ATTRIBUTE_INIT or CLI)
+# 跳过 attribute init
 pixi run train -- --config_path ablations/vsrdpp_velocity_no_init --device_id 0
 
-# Mask erode robustness (full VSRD++ + eroded masks)
+# Mask 腐蚀鲁棒性（完整 VSRD++ + 腐蚀 mask）
 ERODE_RATIO=0.03 bash trainer/scripts/train_enrode_mask.sh
 ```
 
-### Sharded training (cluster)
+### 分片训练（集群）
 
 ```bash
 train_sharded.py --config_path 48 --device_id 0 \
   --saved_ckpt_path /path/to/output_models
 ```
 
-Uses `configs/SPLITS64/split_sub.json` and `train_tsubame_filenames/filename_split64/sub_XX.txt`.
+使用 `configs/SPLITS64/split_sub.json` 与 `train_tsubame_filenames/filename_split64/sub_XX.txt`。
 
 ---
 
-## Shell scripts (`trainer/scripts/`)
+## Shell 脚本（`trainer/scripts/`）
 
-| Script | Purpose |
-|--------|---------|
+| 脚本 | 用途 |
+|------|------|
 | **`ablation.sh`** | **Table I ablation ladder** → `launch_train.py` + study yaml |
-| `launch_train.py` | torchrun launcher (used by `ablation.sh`, `train.sh`, …) |
-| `train.sh` | Generic launcher → `launch_train.py` |
-| `train_enrode_mask.sh` | Mask erode ablation → `train.py` + `--erode_ratio` |
-| `train_smoke.sh` | Single-GPU smoke test |
+| **`train.sh`** | **Stage1 VSRD++ full** → Casual 或 VSRD24 帧列表 |
+| `launch_train.py` | torchrun 启动器（`ablation.sh`、`train.sh` 等共用） |
+| `train_enrode_mask.sh` | Mask 腐蚀 ablation → `train.py` + `--erode_ratio` |
+| `train_smoke.sh` | 单卡 smoke 测试 |
 | `train_sharded.sh` | `train_sharded.py` |
-| `train_tsubame.sh` | Tsubame cluster job template |
-| `lib.sh` | Shared helpers (`ensure_pixi`, wandb flags, …) |
+| `train_tsubame.sh` | Tsubame 集群任务模板 |
+| `lib.sh` | 公共函数（`ensure_pixi`、wandb 参数等） |
 
-Pixi: `pixi run train`, `pixi run train-smoke`, etc.
+Pixi 快捷命令：`pixi run train`、`pixi run train-smoke` 等。
 
-**wandb via shell env** (handled by `lib.sh`):
+**通过 shell 环境变量控制 wandb**（部分脚本经 `lib.sh` 处理）：
 
-| Variable | Effect |
-|----------|--------|
-| `USE_WANDB=1` or `WANDB=1` | Enable `--wandb` |
-| `WANDB_LOG_IMAGES=1` | Add `--wandb_log_images` (`train.py` / `train.sh` init mode only) |
-| `WANDB_PROJECT` | Project name |
-| `WANDB_ENTITY` | Team/entity |
-| `WANDB_NAME` | Run name |
-| `WANDB_TAGS` | Comma-separated tags |
+| 变量 | 作用 |
+|------|------|
+| `USE_WANDB=1` 或 `WANDB=1` | 启用 `--wandb` |
+| `WANDB_LOG_IMAGES=1` | 添加 `--wandb_log_images` |
+| `WANDB_PROJECT` | 项目名 |
+| `WANDB_ENTITY` | 团队/实体 |
+| `WANDB_NAME` | run 名称 |
+| `WANDB_TAGS` | 逗号分隔标签 |
 
-Default run name (if you don't set `WANDB_NAME` / `--wandb_name`):  
-`{config_path}-{hostname}-{YYYYMMDD-HHMMSS}` (e.g. `ablation_selective-megumi-20260702-160512`).
+未设置 `WANDB_NAME` / `--wandb_name` 时的默认名：  
+`{config_path}-{hostname}-{YYYYMMDD-HHMMSS}`。
 
 ```bash
-USE_WANDB=1 WANDB_LOG_IMAGES=1 WANDB_ENTITY=liuzihua1004 WANDB_PROJECT=VSRD-plus-plus \
+USE_WANDB=1 WANDB_LOG_IMAGES=1 WANDB_PROJECT=VSRD++ \
 pixi run bash trainer/scripts/train_smoke.sh
 ```
 
-Example with explicit output directories (recommended layout):
+指定输出目录示例：
 
 ```bash
-CKPT_DIRNAME=/media/zliu/data12/IJCV/vsrdpp/ckpts \
-LOG_DIRNAME=/media/zliu/data12/IJCV/vsrdpp/logs \
-OUT_DIRNAME=/media/zliu/data12/IJCV/vsrdpp/outs \
 USE_WANDB=1 WANDB_LOG_IMAGES=1 \
-pixi run bash trainer/scripts/train.sh
+pixi run bash trainer/scripts/train.sh vsrdpp_casual
 ```
 
-You can also set a readable run name (two equivalent ways):
+自定义 wandb run name（两种方式等价）：
 
 ```bash
-# 1) via env var
-WANDB_NAME="seq10-debug" USE_WANDB=1 pixi run bash trainer/scripts/train.sh
+# 1) 环境变量
+WANDB_NAME="vsrd24-run" USE_WANDB=1 pixi run bash trainer/scripts/train.sh vsrdpp_vsrd24
 
-# 2) pass-through CLI args to python entrypoint
-USE_WANDB=1 pixi run bash trainer/scripts/train.sh --wandb_name "seq10-debug"
+# 2) 在 -- 之后透传给 train.py
+USE_WANDB=1 pixi run bash trainer/scripts/train.sh vsrdpp_casual -- --wandb_name "casual-debug"
 ```
 
-Tip: you may also run `bash trainer/scripts/train.sh` directly — the script will auto re-exec itself under `pixi run` (unless `VSRD_SKIP_PIXI=1`).
+可直接 `bash trainer/scripts/train.sh` — 脚本会自动 `pixi run` 重入（除非 `VSRD_SKIP_PIXI=1`）。**请用 bash，不要用 sh。**
 
 ---
 
-## Configuration
+## 配置结构
 
-Experiment configs under `trainer/configs/experiment/` (Hydra-style YAML layers):
+Experiment 配置在 `trainer/configs/experiment/`（Hydra 风格分层 YAML）：
 
 ```
 configs/
-├── _defaults/           # train, data, model, optim, output, launch
+├── _defaults/              # train、data、model、optim、output、launch
 ├── experiment/
-│   ├── ablations/       # Table I ladder — see ablations/README.md
+│   ├── ablations/          # Table I ladder — 见 ablations/README.md
+│   ├── stage1_trainfiles/  # Casual / VSRD24 帧列表 — 见 stage1_trainfiles/README.md
 │   ├── vsrdpp_sequentials/
 │   ├── smoke.yaml
 │   └── inference.yaml
 └── paths.py, train_modes.py, …
 ```
 
-Load in Python:
+Python 加载：
 
 ```python
 from trainer.configs import load_config
-cfg = load_config("ablations/vsrdpp_full")   # or "05", sequence id, etc.
+cfg = load_config("stage1_trainfiles/vsrdpp_full_casual")
+cfg = load_config("ablations/vsrdpp_full")   # 或 sequence id、smoke 等
 ```
 
-Set `TRAIN.DATASET.ROOT` in `_defaults/data.yaml` or per-experiment override.
+在 `_defaults/data.yaml` 或各 experiment yaml 里设置 `TRAIN.DATASET.ROOT`。
 
-Key flags (see `_defaults/model.yaml`, per-ablation yaml):
+常用训练开关（见 `_defaults/model.yaml` 与各 ablation yaml）：
 
 ```yaml
 TRAIN:
@@ -226,13 +236,13 @@ TRAIN:
   OPTIMIZATION_NUM_STEPS: 3000
 ```
 
-Legacy JSON configs may still exist for older workflows; new runs should use `experiment/*.yaml`.
+新实验请用 `experiment/*.yaml`；旧 JSON 配置可能仍存在，仅供兼容。
 
-Path constants: [preprocessing/dataset_paths.py](../preprocessing/dataset_paths.py).
+路径常量：[preprocessing/dataset_paths.py](../preprocessing/dataset_paths.py)。
 
 ---
 
-## Inference & evaluation
+## 推理与评估
 
 ```bash
 cd trainer
@@ -240,13 +250,13 @@ python inference.py
 python evaluation.py
 ```
 
-Use config `inference.json` (loaded as `conf_val` in those scripts). See [validator/README.md](../validator/README.md) for Stage 1 metrics (IoU, mAP) after training.
+使用 `inference` 配置。Stage 1 指标（IoU、mAP 等）见 [validator/README.md](../validator/README.md)。
 
 ---
 
-## Quick GT visualization (projected 3D boxes + BEV)
+## 快速 GT 可视化（投影 3D box + BEV）
 
-Use this to sanity-check camera conventions / GT orientation against the raw image.
+用于检查相机坐标系 / GT 朝向是否与图像一致。
 
 ```bash
 pixi run python trainer/visualize_gt.py --config_path ablation_selective --index 0 --draw_masks
@@ -254,14 +264,14 @@ pixi run python trainer/visualize_gt.py --config_path ablation_selective --index
 
 ---
 
-## Training vs validator: dynamic labels
+## 训练 vs 验证：dynamic 标签
 
-| Stage | Dynamic/static source |
-|-------|------------------------|
-| **Training** | Online from GT 3D bbox velocity (threshold 0.20 m/frame) |
-| **Validator** | Reads `dynamic_attributes_est_gt/<sequence>/dynamic_mask.txt` |
+| 阶段 | dynamic/static 来源 |
+|------|---------------------|
+| **训练** | 默认在线：GT 3D bbox 速度（阈值 0.20 m/frame） |
+| **验证** | 读取 `dynamic_attributes_est_gt/<sequence>/dynamic_mask.txt` |
 
-Generate labels before evaluation:
+评估前可先生成标签：
 
 ```bash
 pixi run gen-dynamic

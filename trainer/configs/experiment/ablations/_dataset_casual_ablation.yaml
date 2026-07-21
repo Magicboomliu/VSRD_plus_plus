@@ -1,20 +1,3 @@
-# Casual Split ablation 数据（ablations_small；seq03 + seq07，96 帧）
-#
-# 列表文件（绝对路径，不在 DATASET.ROOT 下）：
-#   FILENAMES        → train_ablation_filenames.txt（第 3 列为 source 帧索引，整数）
-#   DYNAMIC_LABELS   → train_ablation_dynamic_mask.txt（第 3 列为 dynamic 0.0/1.0）
-#
-# 全量多 sequence（4143 帧）见 cascual_splits/train_all_filenames.txt
-#
-# txt 内图像路径应为相对 DATASET.ROOT（如 data_2d_raw/...）。若从旧集群拷来含绝对路径，先 normalize：
-#   python preprocessing/data_organization/normalize_ablation_filenames.py \
-#     --root $VSRD_DATASET_ROOT \
-#     --filenames /media/zliu/data12/IJCV/ablations/filenames/ablations_small/train_ablation_filenames.txt \
-#     --dynamic /media/zliu/data12/IJCV/ablations/filenames/ablations_small/train_ablation_dynamic_mask.txt \
-#     --in-place
-TRAIN:
-  DATASET:
-    FILENAMES:
-      - /media/zliu/data12/IJCV/ablations/filenames/cascual_splits/train_all_filenames.txt
-  # 路径供 04/05（USE_DYNAMIC_MASK=true）使用；01~03 请在 experiment yaml 里保持 USE_DYNAMIC_LABELS_FILE: false
-  DYNAMIC_LABELS_PATH: /media/zliu/data12/IJCV/ablations/filenames/cascual_splits/train_all_dynamic_mask.txt
+# Ablation ladder 默认数据：Stage1 Casual split（见 stage1_trainfiles/_dataset_casual.yaml）
+defaults:
+  - ../stage1_trainfiles/_dataset_casual

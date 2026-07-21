@@ -1,0 +1,13 @@
+# VSRD++ Full — Stage1 Casual split（4143 帧，cascual_splits）
+defaults:
+  - ../../_defaults/train
+  - ../../_defaults/launch
+  - ../../_defaults/data
+  - ../../_defaults/model
+  - ../../_defaults/optim
+  - ../../_defaults/output
+  - _dataset_casual
+
+TRAIN:
+  MODEL_TYPE: vsrdpp_full_casual
+  USE_DYNAMIC_LABELS_FILE: true
