@@ -1,0 +1,17 @@
+# Stage1 Validator — Casual split（与 trainer stage1_trainfiles 对齐）
+VALIDATOR:
+  SPLIT_NAME: casual
+  DATASET:
+    ROOT: /media/zliu/data12/dataset/KITTI/KITTI360_For_Upload
+    FILENAMES: /media/zliu/data12/IJCV/ablations/filenames/cascual_splits/train_all_filenames.txt
+    DYNAMIC_LABELS_PATH: /media/zliu/data12/IJCV/ablations/filenames/cascual_splits/train_all_dynamic_mask.txt
+  CKPT:
+    DIRNAME: /media/zliu/data12/IJCV/ablations/saved_models/vsrdpp_full/ckpts
+    FILENAME: step_2499.pt
+  OUTPUT:
+    JSON_FOLDER: predictions
+  MODEL:
+    INPUT_MODEL_TYPE: velocity_with_init
+    CLASS_NAMES: [car]
+  RUN:
+    NUM_WORKERS: 4

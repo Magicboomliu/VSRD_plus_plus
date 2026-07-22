@@ -32,6 +32,7 @@ from validator.tools.dynamic_labels_io import (
     load_dynamic_mask_by_instance_ids,
     resolve_dataset_path,
 )
+from validator.tools.split_list_io import FilenameListEntry, load_filename_list_entries
 
 from vsrd_plus_plus import utils
 from torch.utils.data import Dataset, DataLoader
@@ -64,7 +65,6 @@ from vsrd_plus_plus.datasets.transforms import Resizer,MaskAreaFilter,BoxGenerat
 
 from vsrd_plus_plus import visualization
 from vsrd_plus_plus.utils import Dict
-from trainer.configs import conf_val
 import logging
 from tqdm import tqdm
 import skimage.io
@@ -113,7 +113,44 @@ LINE_INDICES = [
     [0, 4], [1, 5], [2, 6], [3, 7],
 ]
 
+
+def match_predictions_to_gt(accumulated_iou_matrix, accumulated_cnt_matrix):
+    """Hungarian match PD/GT boxes; NaN from 0-count entries -> 0."""
+    averaged_iou_matrix = torch.nan_to_num(
+        accumulated_iou_matrix / accumulated_cnt_matrix,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    matched_pd_indices, matched_gt_indices = vsrd_plus_plus.utils.torch_function(
+        sp.optimize.linear_sum_assignment
+    )(averaged_iou_matrix, maximize=True)
+    confidences = averaged_iou_matrix[matched_pd_indices, matched_gt_indices]
+    return matched_pd_indices, matched_gt_indices, confidences
+
+
+def prediction_json_path(
+    annotation_filename: str,
+    root_dirname: str,
+    *,
+    json_out_dirname: str = "",
+    saved_pseudo_folder_path: str = "predictions",
+    ckpt_dirname: str = "",
+) -> str:
+    """Map GT annotation json path -> prediction json output path."""
+    if json_out_dirname:
+        rel = os.path.relpath(annotation_filename, root_dirname).replace("\\", "/")
+        if rel.startswith("annotations/"):
+            rel = rel[len("annotations/") :]
+        return os.path.join(json_out_dirname, rel)
+    pred_dir = os.path.join(saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
+    return annotation_filename.replace("annotations", pred_dir)
+
 def main(args):
+
+    if getattr(args, "filenames_list", None):
+        main_from_split_list(args)
+        return
 
     sequences = list(map(os.path.basename, sorted(glob.glob(os.path.join(args.root_dirname, "data_2d_raw", "*")))))
     dynamic_dirname = args.dyanmic_root_filename
@@ -135,8 +172,38 @@ def main(args):
                 dynamic_dirname=dynamic_dirname,
                 input_model_type=args.input_model_type,
                 saved_pseudo_folder_path=args.saved_pseudo_folder_path,
+                json_out_dirname=getattr(args, "json_out_dirname", "") or "",
             ), dynamic_seqences):
 
+                progress_bar.update(1)
+
+
+def main_from_split_list(args):
+    """Step1 using merged train_all_filenames.txt + train_all_dynamic_mask.txt."""
+    entries = load_filename_list_entries(
+        args.filenames_list,
+        args.dynamic_labels_path,
+        args.root_dirname,
+    )
+    print(f"[ckpt_infer] split list: {len(entries)} instance groups from {args.filenames_list}")
+
+    with multiprocessing.Pool(args.num_workers) as pool:
+        with tqdm(total=len(entries)) as progress_bar:
+            for _ in pool.imap_unordered(
+                functools.partial(
+                    make_predictions,
+                    root_dirname=args.root_dirname,
+                    ckpt_dirname=args.ckpt_dirname,
+                    ckpt_filename=args.ckpt_filename,
+                    split_dirname=args.split_dirname,
+                    class_names=args.class_names,
+                    dynamic_dirname="",
+                    input_model_type=args.input_model_type,
+                    saved_pseudo_folder_path=args.saved_pseudo_folder_path,
+                    json_out_dirname=getattr(args, "json_out_dirname", "") or "",
+                ),
+                entries,
+            ):
                 progress_bar.update(1)
 
 def make_predictions(
@@ -149,44 +216,58 @@ def make_predictions(
     class_names,
     input_model_type,
     saved_pseudo_folder_path,
+    json_out_dirname="",
 ):
-    
-    # group txt
-    group_filename = os.path.join(root_dirname, "filenames", split_dirname, sequence, "grouped_image_filenames.txt")
-    
-    
-    
-    assert os.path.exists(group_filename)
-    with open(group_filename) as file:
-        grouped_image_filenames = {
-            tuple(map(int, line.split(" ")[0].split(","))): line.split(" ")[1].split(",")
-            for line in map(str.strip, file)
-        }
+    # --- merged split list mode (one entry per call) ---
+    if isinstance(sequence, FilenameListEntry):
+        entry = sequence
+        instance_jobs = [(
+            entry.instance_ids,
+            entry.source_image_paths,
+            entry.target_image_abs,
+            entry.dynamic_labels,
+        )]
+    else:
+        entry = None
+        instance_jobs = None
 
+    if entry is None:
+        # group txt
+        group_filename = os.path.join(root_dirname, "filenames", split_dirname, sequence, "grouped_image_filenames.txt")
 
-    # sample txt
-    sample_filename = os.path.join(root_dirname, "filenames", split_dirname, sequence, "sampled_image_filenames.txt")
-    assert os.path.exists(sample_filename)
-    with open(sample_filename) as file:
-        sampled_image_filenames = {
-            tuple(map(int, line.split(" ")[0].split(","))): resolve_dataset_path(
-                root_dirname, line.split(" ")[1],
+        assert os.path.exists(group_filename)
+        with open(group_filename) as file:
+            grouped_image_filenames = {
+                tuple(map(int, line.split(" ")[0].split(","))): line.split(" ")[1].split(",")
+                for line in map(str.strip, file)
+            }
+
+        # sample txt
+        sample_filename = os.path.join(root_dirname, "filenames", split_dirname, sequence, "sampled_image_filenames.txt")
+        assert os.path.exists(sample_filename)
+        with open(sample_filename) as file:
+            sampled_image_filenames = {
+                tuple(map(int, line.split(" ")[0].split(","))): resolve_dataset_path(
+                    root_dirname, line.split(" ")[1],
+                )
+                for line in map(str.strip, file)
+            }
+
+        dynamic_instance_list = load_dynamic_mask_by_instance_ids(
+            dynamic_dirname, sequence, root_dirname,
+        )
+
+        instance_jobs = [
+            (
+                instance_ids,
+                [resolve_dataset_path(root_dirname, p) for p in grouped_image_filenames[instance_ids]],
+                sampled_image_filenames[instance_ids],
+                dynamic_instance_list[instance_ids],
             )
-            for line in map(str.strip, file)
-        }
+            for instance_ids in grouped_image_filenames
+        ]
 
-    dynamic_instance_list = load_dynamic_mask_by_instance_ids(
-        dynamic_dirname, sequence, root_dirname,
-    )
-        
-    
-    for instance_ids, grouped_image_filenames in tqdm(grouped_image_filenames.items()):
-        
-        # get the target image filename
-        target_image_filename = sampled_image_filenames[instance_ids]
-        # get the instance dynamic list
-        instance_dynamic_list = dynamic_instance_list[instance_ids]
-        
+    for instance_ids, grouped_source_paths, target_image_filename, instance_dynamic_list in instance_jobs:
         # image direction filenames
         target_image_dirname = os.path.splitext(os.path.relpath(target_image_filename, root_dirname))[0]
         # get the models ckpts
@@ -306,7 +387,7 @@ def make_predictions(
             
             callbacks = []
 
-            for source_image_filename in grouped_image_filenames:
+            for source_image_filename in grouped_source_paths:
 
                 source_annotation_filename = source_image_filename.replace("data_2d_raw", "annotations").replace(".png", ".json")
                 assert os.path.exists(source_annotation_filename)
@@ -420,8 +501,13 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join(saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
-                source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
+                source_prediction_filename = prediction_json_path(
+                    source_annotation_filename,
+                    root_dirname,
+                    json_out_dirname=json_out_dirname,
+                    saved_pseudo_folder_path=saved_pseudo_folder_path,
+                    ckpt_dirname=ckpt_dirname,
+                )
                 
 
                 callbacks.append(functools.partial(
@@ -431,10 +517,9 @@ def make_predictions(
                     boxes_2d=source_pd_boxes_2d,
                 ))
 
-            averaged_iou_matrix = accumulated_iou_matrix / accumulated_cnt_matrix
-            matched_pd_indices, matched_gt_indices = vsrd_plus_plus.utils.torch_function(sp.optimize.linear_sum_assignment)(averaged_iou_matrix, maximize=True)
-
-            confidences = averaged_iou_matrix[matched_pd_indices, matched_gt_indices]
+            matched_pd_indices, matched_gt_indices, confidences = match_predictions_to_gt(
+                accumulated_iou_matrix, accumulated_cnt_matrix
+            )
 
             for callback in callbacks:
                 callback(confidences=confidences)
@@ -529,7 +614,7 @@ def make_predictions(
             
             callbacks = []
 
-            for source_image_filename in grouped_image_filenames:
+            for source_image_filename in grouped_source_paths:
 
                 source_annotation_filename = source_image_filename.replace("data_2d_raw", "annotations").replace(".png", ".json")
                 assert os.path.exists(source_annotation_filename)
@@ -629,8 +714,13 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join(saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
-                source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
+                source_prediction_filename = prediction_json_path(
+                    source_annotation_filename,
+                    root_dirname,
+                    json_out_dirname=json_out_dirname,
+                    saved_pseudo_folder_path=saved_pseudo_folder_path,
+                    ckpt_dirname=ckpt_dirname,
+                )
                 
 
                 callbacks.append(functools.partial(
@@ -640,10 +730,9 @@ def make_predictions(
                     boxes_2d=source_pd_boxes_2d,
                 ))
 
-            averaged_iou_matrix = accumulated_iou_matrix / accumulated_cnt_matrix
-            matched_pd_indices, matched_gt_indices = vsrd_plus_plus.utils.torch_function(sp.optimize.linear_sum_assignment)(averaged_iou_matrix, maximize=True)
-
-            confidences = averaged_iou_matrix[matched_pd_indices, matched_gt_indices]
+            matched_pd_indices, matched_gt_indices, confidences = match_predictions_to_gt(
+                accumulated_iou_matrix, accumulated_cnt_matrix
+            )
 
             for callback in callbacks:
                 callback(confidences=confidences)
@@ -750,7 +839,7 @@ def make_predictions(
             
             callbacks = []
 
-            for source_image_filename in grouped_image_filenames:
+            for source_image_filename in grouped_source_paths:
 
                 source_annotation_filename = source_image_filename.replace("data_2d_raw", "annotations").replace(".png", ".json")
                 assert os.path.exists(source_annotation_filename)
@@ -866,8 +955,13 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join(saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
-                source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
+                source_prediction_filename = prediction_json_path(
+                    source_annotation_filename,
+                    root_dirname,
+                    json_out_dirname=json_out_dirname,
+                    saved_pseudo_folder_path=saved_pseudo_folder_path,
+                    ckpt_dirname=ckpt_dirname,
+                )
                 
 
                 callbacks.append(functools.partial(
@@ -877,10 +971,9 @@ def make_predictions(
                     boxes_2d=source_pd_boxes_2d,
                 ))
 
-            averaged_iou_matrix = accumulated_iou_matrix / accumulated_cnt_matrix
-            matched_pd_indices, matched_gt_indices = vsrd_plus_plus.utils.torch_function(sp.optimize.linear_sum_assignment)(averaged_iou_matrix, maximize=True)
-
-            confidences = averaged_iou_matrix[matched_pd_indices, matched_gt_indices]
+            matched_pd_indices, matched_gt_indices, confidences = match_predictions_to_gt(
+                accumulated_iou_matrix, accumulated_cnt_matrix
+            )
 
             for callback in callbacks:
                 callback(confidences=confidences)
@@ -975,7 +1068,7 @@ def make_predictions(
   
             callbacks = []
 
-            for source_image_filename in grouped_image_filenames:
+            for source_image_filename in grouped_source_paths:
 
                 source_annotation_filename = source_image_filename.replace("data_2d_raw", "annotations").replace(".png", ".json")
                 assert os.path.exists(source_annotation_filename)
@@ -1089,8 +1182,13 @@ def make_predictions(
                     with open(filename, "w") as file:
                         json.dump(prediction, file, indent=4, sort_keys=False)
 
-                source_prediction_dirname = os.path.join(saved_pseudo_folder_path, os.path.basename(ckpt_dirname))
-                source_prediction_filename = source_annotation_filename.replace("annotations", source_prediction_dirname)
+                source_prediction_filename = prediction_json_path(
+                    source_annotation_filename,
+                    root_dirname,
+                    json_out_dirname=json_out_dirname,
+                    saved_pseudo_folder_path=saved_pseudo_folder_path,
+                    ckpt_dirname=ckpt_dirname,
+                )
                 
 
                 callbacks.append(functools.partial(
@@ -1100,10 +1198,9 @@ def make_predictions(
                     boxes_2d=source_pd_boxes_2d,
                 ))
 
-            averaged_iou_matrix = accumulated_iou_matrix / accumulated_cnt_matrix
-            matched_pd_indices, matched_gt_indices = vsrd_plus_plus.utils.torch_function(sp.optimize.linear_sum_assignment)(averaged_iou_matrix, maximize=True)
-
-            confidences = averaged_iou_matrix[matched_pd_indices, matched_gt_indices]
+            matched_pd_indices, matched_gt_indices, confidences = match_predictions_to_gt(
+                accumulated_iou_matrix, accumulated_cnt_matrix
+            )
 
             for callback in callbacks:
                 callback(confidences=confidences)
@@ -1191,9 +1288,15 @@ if __name__=="__main__":
                         help=f"Parent dir of per-sequence dynamic_mask.txt (default: {{ROOT}}/{DEFAULT_DYNAMIC_LABELS_PARENT})")
     parser.add_argument("--input_model_type",type=str,default="None",help="Selected from [vanilla,velocity,mlp,velocity_with_init]")
     parser.add_argument("--saved_pseudo_folder_path",type=str,default="predictions",
-                        help="Selected from [vanilla,velocity,mlp,velocity_with_init]")
+                        help="Legacy relative output dir under root_dirname (ignored if --json_out_dirname is set)")
+    parser.add_argument("--json_out_dirname", type=str, default="",
+                        help="Absolute JSON output root (e.g. .../outputs/stage1/ckpt_infer_casual/predictions/json)")
     
     parser.add_argument("--split_dirname", type=str, default="R50-N16-M128-B16")
+    parser.add_argument("--filenames_list", type=str, default="",
+                        help="Merged train_all_filenames.txt (Casual / VSRD24 split list mode)")
+    parser.add_argument("--dynamic_labels_path", type=str, default="",
+                        help="Merged train_all_dynamic_mask.txt (required with --filenames_list)")
     parser.add_argument("--class_names", type=str, nargs="+", default=["car"])
     parser.add_argument("--num_workers", type=int, default=9)
     args = parser.parse_args()

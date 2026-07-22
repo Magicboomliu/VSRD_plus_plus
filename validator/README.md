@@ -1,107 +1,40 @@
-# Validator (Stage 1 & 2 evaluation)
+# Validator — Ckpt infer
 
-Evaluation pipeline for multi-view auto-labeling quality (IoU, mAP, visualization).
+从 Stage1 训练 ckpt 推理，导出 **PD + GT** JSON（legacy Step1a + Step1b）。
 
-**Defaults (aligned with preprocessing output):**
+## Split 配置
 
-| Artifact | Path under `DATASET.ROOT` |
-|----------|---------------------------|
-| Pseudo depth | `pseudo_depth_ssl_waft_stereo/<sequence>/image_00/data_rect/` |
-| Dynamic labels | `dynamic_attributes_est_gt/<sequence>/dynamic_mask.txt` |
+| split | 帧列表 | 帧数 |
+|-------|--------|------|
+| `casual` | `cascual_splits/train_all_filenames.txt` | 4143 |
+| `vsrd24` | `vsrd24_splits/train_all_filenames.txt` | 6901 |
 
-Legacy zip layout (`pseudo_depth_ssl/`, `dynamic_attributes_est/syncXX/`) is no longer the default.
+配置在 `validator/configs/{casual,vsrd24}.yaml`（帧列表 / dynamic）；ckpt 路径在 `validator/scripts/ckpt_infer.sh` 里设 `CKPT_DIRNAME`。
 
-## Workflow
-
-```bash
-# 1. Depth
-sh preprocessing/scripts/generate_pseudo_depth_waft.sh 0006
-
-# 2. Dynamic labels
-python -m preprocessing.Dynamic_Labels.pipeline --config sequence_07
-# or: sh preprocessing/scripts/generate_dynamic_labels.sh
-
-# 3. Verify
-python scripts/compare_dynamic_mask_gt.py --config sequence_07
-
-# 4. Validator
-export ROOT_DIRNAME=/path/to/KITTI360_For_Upload
-export CKPT_DIRNAME=/path/to/trainer/ckpts/your_run
-export DYNAMIC_DIRNAME=${ROOT_DIRNAME}/dynamic_attributes_est_gt
-sh validator/make_predictions_scripts/run_evaluation_pipeline.sh
-```
-
-Compare vs **legacy** labels: add `--dynamic-path dynamic_attributes_est/sync07/dynamic_mask.txt` to the compare script.
-
-### Environment variables
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `ROOT_DIRNAME` | KITTI360 dataset root | |
-| `CKPT_DIRNAME` | `trainer/ckpts` | Checkpoint directory for export |
-| `DYNAMIC_DIRNAME` | `{ROOT}/dynamic_attributes_est_gt` | Parent of `<sequence>/dynamic_mask.txt` |
-| `INPUT_MODEL_TYPE` | `velocity_with_init` | Model architecture for JSON export |
-| `NUM_WORKERS` | `4` | Multiprocessing workers |
-
----
-
-## Stage1: Multi-View AutoLabeling validator
-
-### Step1: Generate pseudo labels in JSON format
-
-**Prediction generation**
+## 运行
 
 ```bash
-cd validator/make_predictions_scripts
-sh make_prediction.sh
+bash validator/scripts/ckpt_infer.sh
+bash validator/scripts/ckpt_infer.sh ckpt_infer_vsrd24
+bash validator/scripts/ckpt_infer.sh ckpt_infer_casual -- --ckpt_dirname /path/to/ckpts
 ```
 
-**Ground truth generation**
+脚本顶部改这几项：
 
 ```bash
-cd validator/make_predictions_scripts
-sh make_gt_prediction.sh
+DATASET_ROOT=...          # KITTI360 根目录（读图像/annotation）
+CKPT_DIRNAME=...          # 训练 ckpt 根目录
+CKPT_FILENAME=step_2499.pt
+OUTPUT_ROOT=...           # PD: ${OUTPUT_ROOT}/${STUDY}/predictions/json/...
+                          # GT: ${OUTPUT_ROOT}/${STUDY}/predictions/gt/...
+NUM_WORKERS=4
 ```
 
-Both read `{DYNAMIC_DIRNAME}/<sequence>/dynamic_mask.txt` (e.g. `.../2013_05_28_drive_0007_sync/dynamic_mask.txt`).
+示例（casual）：
 
-### Step2: Convert to KITTI3D `.txt` format
-
-```bash
-cd validator/make_predictions_scripts
-python ../tools/Predictions/convert_prediction.py \
-    --root_dirname $ROOT_DIRNAME \
-    --ckpt_dirname $CKPT_DIRNAME \
-    --json_foldername predictions \
-    --output_labelname perfect_prediction
+```text
+.../ckpt_infer_casual/predictions/json/data_2d_raw/.../0000000250.json   # PD
+.../ckpt_infer_casual/predictions/gt/data_2d_raw/.../0000000250.json       # GT
 ```
 
-### Step3: Dynamic attribute assignment for GT KITTI labels
-
-Reads the same `dynamic_mask.txt` as Step1.
-
-```bash
-cd validator/make_predictions_scripts
-sh dynamic_attribute.sh
-```
-
-### Step4: Convert to KITTI3D folder structure
-
-```bash
-cd validator/dataset_structure_configuration
-sh conversion_kitti3d_structure.sh
-```
-
-### Step5: mIoU / Step6: mAP
-
-```bash
-cd validator/stage1_evaluation_scripts
-sh get_iou.sh
-sh get_mAP.sh
-```
-
-### Unified pipeline (Step 1–4)
-
-```bash
-sh validator/make_predictions_scripts/run_evaluation_pipeline.sh
-```
+帧列表 / dynamic 读 `validator/configs/splits/_*.yaml`。不使用 wandb。

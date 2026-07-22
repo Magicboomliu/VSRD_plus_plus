@@ -1,0 +1,3 @@
+# Validator Step1+ — Casual split（默认 ckpt 路径请按实际训练输出修改）
+defaults:
+  - splits/_casual
